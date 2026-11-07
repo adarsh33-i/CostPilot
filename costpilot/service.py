@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -12,6 +13,7 @@ from costpilot import ENGINE_VERSION, RULEBOOK_VERSION, SCHEMA_VERSION
 from costpilot.audit import AuditStore, compare_results
 from costpilot.connectors import CONNECTORS, MappingRegistry, run_connector
 from costpilot.data.capability import build_capability
+from costpilot.data.documents import extract, public_view
 from costpilot.data.loader import Snapshot, load_snapshot
 from costpilot.data.uploads import (
     active_dataset,
@@ -21,6 +23,7 @@ from costpilot.data.uploads import (
     set_active,
 )
 from costpilot.engine import abc, budgets, group, monitoring, performance
+from costpilot.engine import documents as document_engine
 from costpilot.engine.costing import bridge
 from costpilot.engine.decisions import SUPPORTED, run_decision
 from costpilot.engine.errors import DomainError
@@ -128,6 +131,96 @@ class ToolService:
             entry["upload"] = summary
         record_dataset(self.datasets_root, entry)
         return {"previous": previous, **entry}
+
+    # ---------- attachments ----------
+
+    def create_attachment(
+        self,
+        raw: bytes,
+        filename: str,
+        *,
+        user: Any | None = None,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Extract an uploaded document and keep it for later analysis."""
+        payload = extract(raw, filename)
+        attachment_id = "att_" + secrets.token_hex(8)
+        record = {
+            **payload,
+            "attachment_id": attachment_id,
+            "user_id": getattr(user, "user_id", None),
+            "session_id": session_id,
+            "created_at": _now_iso(),
+        }
+        self.store.put_object("attachment", attachment_id, record)
+        return public_view(record)
+
+    def attachment(self, attachment_id: str) -> dict[str, Any] | None:
+        return self.store.get_object("attachment", attachment_id)
+
+    def session_attachments(self, session_id: str) -> list[dict[str, Any]]:
+        rows = [
+            row
+            for row in self.store.list_objects("attachment")
+            if row.get("session_id") == session_id
+        ]
+        return [public_view(row) for row in rows]
+
+    def run_attachment_analysis(
+        self,
+        *,
+        attachment_id: str,
+        operation: str,
+        table: str | None = None,
+        column: str | None = None,
+        compare_column: str | None = None,
+        query: str | None = None,
+        limit: int = 5,
+        direction: str = "top",
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        attachment = self.store.get_object("attachment", attachment_id)
+        if attachment is None:
+            raise DomainError(
+                "E_ATTACHMENT_NOT_FOUND",
+                f"Attachment {attachment_id} was not found.",
+                "Attach the document again and ask the question in the same message.",
+            )
+        result = document_engine.run_attachment_analysis(
+            attachment,
+            operation=operation,
+            table=table,
+            column=column,
+            compare_column=compare_column,
+            query=query,
+            limit=limit,
+            direction=direction,
+        )
+        arguments = {
+            "attachment_id": attachment_id,
+            "attachment_name": attachment.get("name"),
+            "attachment_sha256": attachment.get("sha256"),
+            "operation": operation,
+            "table": table,
+            "column": column,
+            "compare_column": compare_column,
+            "query": query,
+            "limit": limit,
+            "direction": direction,
+        }
+        return self._seal(
+            tool="run_attachment_analysis",
+            intent="attachment_analysis",
+            arguments={key: value for key, value in arguments.items() if value is not None},
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
 
     # ---------- metadata ----------
 
@@ -1257,6 +1350,18 @@ class ToolService:
         if tool == "run_abc_profitability":
             return self.run_abc_profitability(
                 period_id=period, plant_id=plant, basis=arguments.get("basis", "labor_hours"), record=False
+            )
+        if tool == "run_attachment_analysis":
+            return self.run_attachment_analysis(
+                attachment_id=str(arguments.get("attachment_id", "")),
+                operation=str(arguments.get("operation", "profile")),
+                table=arguments.get("table"),
+                column=arguments.get("column"),
+                compare_column=arguments.get("compare_column"),
+                query=arguments.get("query"),
+                limit=int(arguments.get("limit", 5)),
+                direction=str(arguments.get("direction", "top")),
+                record=False,
             )
         if tool == "run_tdabc":
             return self.run_tdabc(period_id=period, plant_id=plant, record=False)

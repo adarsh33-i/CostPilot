@@ -46,6 +46,7 @@ class PlatformStore:
                     text TEXT NOT NULL,
                     plan_id TEXT,
                     run_id TEXT,
+                    attachments_json TEXT,
                     created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS plans (
@@ -66,6 +67,12 @@ class PlatformStore:
                 );
                 """
             )
+            columns = {
+                row["name"]
+                for row in self._connection.execute("PRAGMA table_info(messages)").fetchall()
+            }
+            if "attachments_json" not in columns:
+                self._connection.execute("ALTER TABLE messages ADD COLUMN attachments_json TEXT")
 
     def create_session(self, user_id: str, dataset_id: str) -> dict[str, Any]:
         session_id = "ses_" + secrets.token_hex(6)
@@ -112,14 +119,21 @@ class PlatformStore:
         return cursor.rowcount > 0
 
     def add_message(
-        self, session_id: str, role: str, text: str, plan_id: str | None = None, run_id: str | None = None
+        self,
+        session_id: str,
+        role: str,
+        text: str,
+        plan_id: str | None = None,
+        run_id: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         now = _now()
+        payload = json.dumps(attachments, ensure_ascii=False) if attachments else None
         with self._lock, self._connection:
             cursor = self._connection.execute(
-                "INSERT INTO messages (session_id, role, text, plan_id, run_id, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, role, text, plan_id, run_id, now),
+                "INSERT INTO messages (session_id, role, text, plan_id, run_id, attachments_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (session_id, role, text, plan_id, run_id, payload, now),
             )
             self._connection.execute(
                 "UPDATE sessions SET updated_at = ? WHERE session_id = ?", (now, session_id)
@@ -131,6 +145,7 @@ class PlatformStore:
             "text": text,
             "plan_id": plan_id,
             "run_id": run_id,
+            "attachments": attachments or [],
             "created_at": now,
         }
 
@@ -139,7 +154,13 @@ class PlatformStore:
             rows = self._connection.execute(
                 "SELECT * FROM messages WHERE session_id = ? ORDER BY message_id", (session_id,)
             ).fetchall()
-        return [dict(row) for row in rows]
+        out = []
+        for row in rows:
+            item = dict(row)
+            raw = item.pop("attachments_json", None)
+            item["attachments"] = json.loads(raw) if raw else []
+            out.append(item)
+        return out
 
     def save_plan(self, plan: dict[str, Any], user_id: str) -> dict[str, Any]:
         plan_id = plan.get("plan_id") or "plan_" + secrets.token_hex(6)

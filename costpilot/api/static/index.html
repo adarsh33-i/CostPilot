@@ -169,6 +169,38 @@ li{margin:2px 0}
 .send-btn:disabled{opacity:.45;cursor:not-allowed}
 .composer-hint{width:min(880px,100%);margin:7px auto 0;display:flex;justify-content:space-between;gap:10px;font-size:10.5px;color:var(--muted)}
 
+/* ---------- attachments ---------- */
+.attach-tray{width:min(880px,100%);margin:0 auto 8px;display:none;gap:8px;flex-wrap:wrap}
+.attach-tray.on{display:flex}
+.attach-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line-strong);background:var(--card);
+  border-radius:11px;padding:5px 6px 5px 8px;font-size:11.5px;max-width:310px;box-shadow:0 1px 2px rgba(24,39,48,.05)}
+.attach-chip .kind{flex:0 0 auto;font-family:var(--mono);font-size:9.5px;letter-spacing:.04em;color:var(--teal-deep);
+  background:var(--teal-weak);border-radius:5px;padding:2px 5px;text-transform:uppercase}
+.attach-chip .meta{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.attach-chip .name{font-weight:600;color:var(--ink);max-width:196px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attach-chip .sub{font-size:10px;color:var(--muted);max-width:196px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attach-chip.uploading{opacity:.8}
+.attach-chip.failed{border-color:#e3c6c0;background:var(--red-weak)}
+.attach-chip.failed .sub{color:var(--red)}
+.attach-chip .attach-x{border:0;background:transparent;color:var(--muted);cursor:pointer;display:grid;place-items:center;
+  width:20px;height:20px;border-radius:6px;flex:0 0 auto}
+.attach-chip .attach-x:hover{background:rgba(24,39,48,.08);color:var(--ink)}
+.attach-chip .attach-retry{border:0;background:transparent;color:var(--teal-deep);font-size:10.5px;font-weight:650;cursor:pointer;
+  padding:2px 4px;border-radius:5px;flex:0 0 auto}
+.attach-chip .attach-retry:hover{background:var(--teal-weak)}
+.attach-chip .spinner{width:12px;height:12px;border-width:2px;flex:0 0 auto}
+.composer.drag{border-color:var(--teal);background:var(--teal-weak)}
+.thread.drag{outline:2px dashed var(--teal);outline-offset:-8px;border-radius:14px}
+.msg.user .bubble .bubble-text{white-space:pre-wrap}
+.msg.user .msg-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;justify-content:flex-end}
+.msg.user .msg-attachments:last-child{margin-bottom:0}
+.msg.user .chip-att{display:inline-flex;align-items:center;gap:6px;max-width:100%;border:1px solid rgba(247,244,236,.34);
+  background:rgba(247,244,236,.14);border-radius:8px;padding:3px 8px;font-size:11px;color:#f7f4ec}
+.msg.user .chip-att .icon{opacity:.85}
+.msg.user .chip-att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg.user .chip-att em{font-style:normal;opacity:.7;font-size:10px;white-space:nowrap}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
 /* ---------- buttons, pills ---------- */
 .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-strong);background:var(--card);border-radius:9px;
   padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;color:var(--ink-2);transition:background .12s,border-color .12s,color .12s}
@@ -375,6 +407,7 @@ const state = {
   dataset: null,
   datasetList: null,
   sending: false,
+  attachments: [],
   lastQuestion: "",
   lastRun: null,
   pendingNotice: "",
@@ -430,6 +463,8 @@ const ICONS = {
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5h10"/>',
   logout: '<path d="M15 4h4v16h-4"/><path d="M10 8 6 12l4 4"/><path d="M6 12h9"/>',
   excel: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m8 9 8 6M16 9l-8 6"/>',
+  paperclip: '<path d="M20.5 11.5 12.1 19.9a4.9 4.9 0 0 1-7-7l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/>',
 };
 
 function icon(name, size) {
@@ -537,6 +572,7 @@ function logout() {
   state.sessionId = null;
   state.messages = [];
   state.sessions = [];
+  state.attachments = [];
   localStorage.removeItem(LS_TOKEN);
   closeDrawer();
   closeModal();
@@ -738,7 +774,7 @@ async function loadThread() {
   const rows = detail.messages || [];
   const built = [];
   for (const row of rows) {
-    const item = { role: row.role, text: row.text, at: row.created_at, planId: row.plan_id, runId: row.run_id };
+    const item = { role: row.role, text: row.text, at: row.created_at, planId: row.plan_id, runId: row.run_id, attachments: row.attachments || [] };
     if (row.role === "assistant" && row.run_id) {
       try { item.card = await api("/v1/runs/" + row.run_id); } catch (err) { /* card stays unavailable */ }
     }
@@ -753,6 +789,19 @@ async function loadThread() {
     built.push(item);
   }
   state.messages = built;
+  const lastAttached = [...built].reverse().find((item) => item.role === "user" && (item.attachments || []).length);
+  state.attachments = lastAttached
+    ? lastAttached.attachments.map((file) => ({
+        key: file.attachment_id || file.name,
+        name: file.name || "attachment",
+        size: file.size,
+        status: "ready",
+        error: null,
+        file: null,
+        attachment: file,
+      }))
+    : [];
+  renderAttachTray();
 }
 
 /* ------------------------------------------------------------------ */
@@ -798,7 +847,7 @@ function mountShell() {
   const input = h("textarea", {
     id: "composer",
     rows: 1,
-    placeholder: "Ask about a variance, a special order, customer margin, or the budget…",
+    placeholder: "Ask about a variance, a special order, customer margin, or an attached file…",
     onkeydown: (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
@@ -806,18 +855,43 @@ function mountShell() {
       }
     },
     oninput: () => autoGrow(input),
+    onpaste: (event) => pasteFiles(event),
   });
   const sendBtn = h("button", { class: "send-btn", "aria-label": "Send", onclick: () => send(input.value) }, icon("send", 16));
-  const composer = h("div", { class: "composer" },
-    h("button", { class: "icon-btn", "aria-label": "Dataset", title: "Dataset", onclick: () => openDataset() }, icon("database", 17)),
+  const attachInput = h("input", {
+    type: "file",
+    id: "attach-input",
+    class: "sr-only",
+    multiple: true,
+    tabindex: "-1",
+    accept: ATTACH_ACCEPT,
+    onchange: (event) => {
+      queueFiles(event.target.files);
+      event.target.value = "";
+    },
+  });
+  const attachBtn = h("button", {
+    class: "icon-btn",
+    type: "button",
+    "aria-label": "Attach a document",
+    title: "Attach a spreadsheet, Word file, PDF, text file or screenshot",
+    onclick: () => attachInput.click(),
+  }, icon("paperclip", 17));
+  const tray = h("div", { class: "attach-tray", id: "attach-tray" });
+  const composer = h("div", { class: "composer", id: "composer-box" },
+    h("button", { class: "icon-btn", type: "button", "aria-label": "Dataset", title: "Dataset", onclick: () => openDataset() }, icon("database", 17)),
+    attachBtn,
+    attachInput,
     input,
     sendBtn
   );
   const hint = h("div", { class: "composer-hint" },
-    h("span", {}, "Enter to send · Shift+Enter for a new line"),
+    h("span", {}, "Enter to send · Shift+Enter for a new line · drop or paste a file"),
     h("span", {}, "Local models · every number from the rule engine")
   );
-  const composerWrap = h("div", { class: "composer-wrap" }, composer, hint);
+  const composerWrap = h("div", { class: "composer-wrap" }, tray, composer, hint);
+  wireDropTarget(composer);
+  wireDropTarget(thread);
   const main = h("main", { class: "main" }, topbar, thread, composerWrap);
   const shell = h("div", { class: "shell", id: "shell" }, sidebar, main);
 
@@ -832,6 +906,10 @@ function mountShell() {
   dom.thread = thread;
   dom.input = input;
   dom.send = sendBtn;
+  dom.attachInput = attachInput;
+  dom.attachTray = tray;
+  dom.composerBox = composer;
+  renderAttachTray();
 }
 
 function toggleNav(open) {
@@ -946,7 +1024,7 @@ function renderHero() {
     h("h1", {}, "What should we cost out?"),
     h("p", {},
       "Ask in plain English. CostPilot resolves the period, plant and product, shows the parameter sheet, and only calculates after you confirm. " +
-      "Every number comes from a registered rule with a formula, inputs and a source."
+      "Every number comes from a registered rule with a formula, inputs and a source. Attach a workbook, a Word file, a PDF or a screenshot and ask about it."
     ),
     dataset
       ? h("div", { class: "dataset-line" },
@@ -956,6 +1034,10 @@ function renderHero() {
           h("button", { class: "btn sm ghost", onclick: () => openDataset() }, "Replace dataset")
         )
       : h("div", { class: "dataset-line" }, pill("No dataset loaded", "amber"), h("button", { class: "btn sm", onclick: () => openDataset() }, "Upload a workbook")),
+    h("div", { class: "dataset-line" },
+      h("button", { class: "btn sm ghost", onclick: () => dom.attachInput && dom.attachInput.click() }, icon("paperclip", 13), "Attach a document"),
+      h("span", { class: "small", style: { color: "var(--muted)" } }, "Excel, Word, PDF, CSV, text or a screenshot")
+    ),
     h("div", { class: "starters" },
       STARTERS.map((starter) =>
         h("button", { class: "starter", onclick: () => send(starter.text) },
@@ -969,7 +1051,9 @@ function renderHero() {
 
 function renderMessage(message) {
   if (message.role === "user") {
-    return h("div", { class: "msg user" }, h("div", { class: "bubble" }, message.text));
+    const bubble = h("div", { class: "bubble" }, renderMessageAttachments(message.attachments));
+    if (message.text) bubble.appendChild(h("div", { class: "bubble-text" }, message.text));
+    return h("div", { class: "msg user" }, bubble);
   }
   const body = h("div", { class: "msg-body" });
   if (message.thinking) {
@@ -1520,6 +1604,186 @@ function scrollToLastPlan() {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* attachments                                                        */
+/* ------------------------------------------------------------------ */
+
+const ATTACH_ACCEPT = ".xlsx,.xlsm,.csv,.docx,.pdf,.txt,.md,.json,.png,.jpg,.jpeg,.webp,.tif,.tiff,.bmp,.heic";
+const ATTACH_MAX_BYTES = 25 * 1024 * 1024;
+
+function fileKind(name) {
+  const match = /\.([a-z0-9]+)$/i.exec(String(name || ""));
+  return match ? match[1].toUpperCase() : "FILE";
+}
+
+function formatBytes(size) {
+  const bytes = Number(size || 0);
+  if (!bytes) return "";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0) + " MB";
+}
+
+function wireDropTarget(node) {
+  if (!node) return;
+  const carriesFiles = (event) => !!(event.dataTransfer && Array.from(event.dataTransfer.types || []).includes("Files"));
+  const setDrag = (on) => {
+    if (dom.composerBox) dom.composerBox.classList.toggle("drag", on);
+    if (node !== dom.composerBox) node.classList.toggle("drag", on);
+  };
+  node.addEventListener("dragover", (event) => {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDrag(true);
+  });
+  node.addEventListener("dragleave", (event) => {
+    const next = event.relatedTarget;
+    if (next && node.contains(next)) return;
+    setDrag(false);
+  });
+  node.addEventListener("drop", (event) => {
+    if (!event.dataTransfer || !event.dataTransfer.files || !event.dataTransfer.files.length) return;
+    event.preventDefault();
+    setDrag(false);
+    queueFiles(event.dataTransfer.files);
+  });
+}
+
+function namePastedFile(file, index) {
+  if (file.name && file.name !== "image.png") return file;
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const name = "screenshot-" + stamp + (index ? "-" + (index + 1) : "") +
+    (file.type === "image/jpeg" ? ".jpg" : ".png");
+  return new File([file], name, { type: file.type || "image/png" });
+}
+
+function pasteFiles(event) {
+  const data = event.clipboardData;
+  if (!data || !data.items) return;
+  const files = [];
+  for (const item of Array.from(data.items)) {
+    if (item.kind !== "file") continue;
+    const file = item.getAsFile();
+    if (file) files.push(file);
+  }
+  if (!files.length) return;
+  event.preventDefault();
+  queueFiles(files.map((file, index) => namePastedFile(file, index)));
+}
+
+function queueFiles(files) {
+  const list = Array.from(files || []).filter(Boolean);
+  if (!list.length) return;
+  for (const file of list) {
+    if (file.size > ATTACH_MAX_BYTES) {
+      toast('"' + (file.name || "This file") + '" is ' + formatBytes(file.size) +
+        ". The limit is 25 MB per file; export a smaller range and try again.", "error", 6200);
+      continue;
+    }
+    const entry = {
+      key: "att" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: file.name || "attachment",
+      size: file.size,
+      status: "uploading",
+      error: null,
+      attachment: null,
+      file,
+    };
+    state.attachments.push(entry);
+    uploadAttachment(entry);
+  }
+  renderAttachTray();
+}
+
+async function uploadAttachment(entry) {
+  entry.status = "uploading";
+  entry.error = null;
+  renderAttachTray();
+  try {
+    const form = new FormData();
+    form.append("file", entry.file, entry.name);
+    entry.attachment = await api("/v1/attachments", { method: "POST", body: form });
+    entry.status = "ready";
+  } catch (err) {
+    entry.status = "failed";
+    entry.error = err;
+  } finally {
+    renderAttachTray();
+  }
+}
+
+function removeAttachment(entry) {
+  const index = state.attachments.indexOf(entry);
+  if (index >= 0) state.attachments.splice(index, 1);
+  renderAttachTray();
+  if (dom.input) dom.input.focus();
+}
+
+function clearAttachments() {
+  state.attachments = [];
+  renderAttachTray();
+}
+
+function attachmentSummary(entry) {
+  if (entry.status === "uploading") return "Uploading and reading…";
+  if (entry.status === "failed") {
+    const err = entry.error;
+    const lines = [err && err.message, (err && err.remediation && err.remediation[0]) || ""].filter(Boolean);
+    return lines.length ? lines.join(" · ") : "Upload failed";
+  }
+  const view = entry.attachment || {};
+  const parts = [formatBytes(entry.size)];
+  const tables = (view.tables || []).length;
+  if (tables) parts.push(tables + (tables === 1 ? " table" : " tables"));
+  const sheets = ["xlsx", "xlsm", "csv"].includes(String(view.kind || ""));
+  if (view.pages && !sheets) parts.push(view.pages + (view.pages === 1 ? " page" : " pages"));
+  if (view.ocr) parts.push("read by OCR");
+  return parts.filter(Boolean).join(" · ");
+}
+
+function renderAttachTray() {
+  if (!dom.attachTray) return;
+  const tray = dom.attachTray;
+  tray.replaceChildren();
+  tray.classList.toggle("on", state.attachments.length > 0);
+  for (const entry of state.attachments) {
+    const failed = entry.status === "failed";
+    const err = entry.error || {};
+    const title = failed
+      ? [err.message, (err.remediation || [])[0]].filter(Boolean).join(" — ")
+      : entry.name;
+    tray.appendChild(h("div", { class: "attach-chip " + entry.status, title },
+      h("span", { class: "kind" }, fileKind(entry.name)),
+      h("div", { class: "meta" },
+        h("span", { class: "name" }, entry.name),
+        h("span", { class: "sub" }, attachmentSummary(entry))
+      ),
+      entry.status === "uploading" ? h("span", { class: "spinner" }) : null,
+      failed ? h("button", { class: "attach-retry", type: "button", onclick: () => uploadAttachment(entry) }, "Retry") : null,
+      h("button", {
+        class: "attach-x",
+        type: "button",
+        title: "Remove",
+        "aria-label": "Remove " + entry.name,
+        onclick: () => removeAttachment(entry),
+      }, icon("close", 12))
+    ));
+  }
+}
+
+function renderMessageAttachments(list) {
+  if (!list || !list.length) return null;
+  return h("div", { class: "msg-attachments" }, list.map((file) => {
+    const sheets = ["xlsx", "xlsm", "csv"].includes(String(file.kind || ""));
+    return h("span", { class: "chip-att", title: file.name || "" },
+      icon("file", 12),
+      h("span", {}, file.name || "attachment"),
+      file.pages && !sheets ? h("em", {}, file.pages + (file.pages === 1 ? " page" : " pages")) : null
+    );
+  }));
+}
+
 function runAction(action, message, err) {
   const remediation = (err && err.remediation) || [];
   switch (action) {
@@ -1603,15 +1867,33 @@ async function ensureSession() {
 }
 
 async function send(text) {
-  const value = String(text || "").trim();
-  if (!value) return;
   if (state.sending) { toast("A question is already running. Wait for it to finish."); return; }
+  const value = String(text || "").trim();
+  const uploading = state.attachments.find((entry) => entry.status === "uploading");
+  if (uploading) {
+    toast('"' + uploading.name + '" is still uploading. Wait for it to finish, or remove it.', "error", 5200);
+    return;
+  }
+  const ready = state.attachments.filter((entry) => entry.status === "ready" && entry.attachment);
+  const sentAttachments = ready.map((entry) => ({
+    attachment_id: entry.attachment.attachment_id,
+    name: entry.attachment.name || entry.name,
+    kind: entry.attachment.kind,
+    size: entry.attachment.size,
+    pages: entry.attachment.pages,
+    ocr: entry.attachment.ocr,
+  })).filter((file) => file.attachment_id);
+  const question = value || (sentAttachments.length ? "Summarise the attached file." : "");
+  if (!question) {
+    if (state.attachments.length) toast("No file finished uploading. Retry the failed file or remove it.", "error", 5200);
+    return;
+  }
   state.sending = true;
   if (dom.input) { dom.input.value = ""; autoGrow(dom.input); }
   if (dom.send) dom.send.disabled = true;
   toggleNav(false);
-  state.lastQuestion = value;
-  state.messages.push({ role: "user", text: value, at: new Date().toISOString() });
+  state.lastQuestion = question;
+  state.messages.push({ role: "user", text: question, at: new Date().toISOString(), attachments: sentAttachments });
   const thinking = {
     role: "assistant",
     thinking: true,
@@ -1623,7 +1905,7 @@ async function send(text) {
     const session = await ensureSession();
     const payload = await api("/v1/sessions/" + session + "/messages", {
       method: "POST",
-      body: { text: value, model: state.model || null },
+      body: { text: question, model: state.model || null, attachment_ids: sentAttachments.map((file) => file.attachment_id) },
     });
     const index = state.messages.indexOf(thinking);
     if (index >= 0) state.messages.splice(index, 1);
@@ -1660,6 +1942,7 @@ async function newChat() {
     const created = await api("/v1/sessions", { method: "POST", body: {} });
     state.sessionId = created.session.session_id;
     state.messages = [];
+    clearAttachments();
     await loadSessions();
     toggleNav(false);
     renderAll();
@@ -1674,6 +1957,7 @@ async function selectSession(sessionId) {
   if (state.sending) { toast("Wait for the current question to finish."); return; }
   state.sessionId = sessionId;
   state.messages = [];
+  clearAttachments();
   toggleNav(false);
   renderAll();
   dom.thread.replaceChildren(loadingBlock("Opening the conversation…"));

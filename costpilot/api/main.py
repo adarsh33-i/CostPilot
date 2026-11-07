@@ -33,6 +33,7 @@ NOT_FOUND = {
     "RUN_NOT_FOUND",
     "E_PLAN_NOT_FOUND",
     "E_SESSION_NOT_FOUND",
+    "E_ATTACHMENT_NOT_FOUND",
     "REGISTRY_PROPOSAL_UNKNOWN",
     "MAPPING_NOT_FOUND",
     "REGISTRY_ACCOUNT_UNKNOWN",
@@ -66,12 +67,33 @@ UNPROCESSABLE = {
     "E_MODEL_UNAVAILABLE",
     "E_DATASET_FORMAT",
     "SCHEMA_MISMATCH",
+    "E_ATTACHMENT_FORMAT",
+    "E_ATTACHMENT_EMPTY",
+    "E_ATTACHMENT_TOO_LARGE",
+    "E_ATTACHMENT_TABLE",
+    "E_ATTACHMENT_COLUMN",
+    "E_ATTACHMENT_NO_NUMBERS",
+    "E_ATTACHMENT_OPERATION",
+    "E_ATTACHMENT_QUERY",
+    "E_ATTACHMENT_NO_MATCH",
+    "E_ATTACHMENT_OCR",
+    "DOC_VALIDATION",
 }
 ACTIONS = {
     "E_AUTH_REQUIRED": ["login"],
     "E_AUTH_INVALID": ["retry_login"],
     "E_AUTH_EXPIRED": ["login"],
     "E_AUTH_SCOPE": ["request_access", "change_scope"],
+    "E_ATTACHMENT_NOT_FOUND": ["attach_file"],
+    "E_ATTACHMENT_FORMAT": ["attach_file", "download_template"],
+    "E_ATTACHMENT_EMPTY": ["attach_file"],
+    "E_ATTACHMENT_TOO_LARGE": ["attach_file", "split_file"],
+    "E_ATTACHMENT_TABLE": ["choose_table"],
+    "E_ATTACHMENT_COLUMN": ["choose_column"],
+    "E_ATTACHMENT_NO_NUMBERS": ["choose_column"],
+    "E_ATTACHMENT_QUERY": ["ask_again"],
+    "E_ATTACHMENT_NO_MATCH": ["ask_again", "choose_column"],
+    "E_ATTACHMENT_OCR": ["attach_image", "install_ocr"],
     "E_PLAN_AMBIGUOUS": ["choose_interpretation", "select_dimension"],
     "E_PLAN_UNSUPPORTED": ["show_supported", "nearest_analysis"],
     "E_PLAN_SCHEMA": ["retry_plan", "open_form"],
@@ -100,8 +122,9 @@ class LoginRequest(BaseModel):
 
 
 class MessageRequest(BaseModel):
-    text: str
+    text: str = ""
     model: str | None = None
+    attachment_ids: list[str] = Field(default_factory=list)
 
 
 class ConfirmRequest(BaseModel):
@@ -332,7 +355,33 @@ def create_app(service: ToolService | None = None, auth: AuthService | None = No
         user: User = Depends(current_user),
         orch: Orchestrator = Depends(get_orchestrator),
     ) -> dict[str, Any]:
-        return orch.post_message(user, session_id, payload.text, model=payload.model)
+        return orch.post_message(
+            user,
+            session_id,
+            payload.text,
+            model=payload.model,
+            attachment_ids=payload.attachment_ids,
+        )
+
+    @app.post("/v1/attachments")
+    async def upload_attachment(
+        file: UploadFile = File(...),
+        session_id: str | None = Form(None),
+        user: User = Depends(current_user),
+        orch: Orchestrator = Depends(get_orchestrator),
+    ) -> dict[str, Any]:
+        raw = await file.read()
+        return orch.upload_attachment(
+            user, file.filename or "attachment", raw, session_id=session_id
+        )
+
+    @app.get("/v1/attachments/{attachment_id}")
+    def get_attachment(
+        attachment_id: str,
+        user: User = Depends(current_user),
+        orch: Orchestrator = Depends(get_orchestrator),
+    ) -> dict[str, Any]:
+        return orch.attachment(user, attachment_id)
 
     @app.post("/v1/sessions/{session_id}/close")
     def close_session(

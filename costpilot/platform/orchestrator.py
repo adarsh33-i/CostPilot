@@ -16,6 +16,7 @@ from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
 from typing import Any
 
+from costpilot.data.documents import AttachmentError, public_view
 from costpilot.engine.errors import DomainError
 from costpilot.engine.money import display_amount
 from costpilot.engine.narration import fallback_template, render_validated
@@ -30,6 +31,7 @@ AUTO_INTENTS = {"describe_dataset", "audit_verify", "explain_run"}
 READ_ONLY_INTENTS = {"describe_dataset", "audit_verify", "explain_run", "connector_preview"}
 INTENT_LABELS = {
     "describe_dataset": "Dataset capability",
+    "attachment_analysis": "Attached document",
     "variance_analysis": "Variance analysis",
     "costing_bridge": "Variable-to-absorption bridge",
     "special_order": "Special order",
@@ -67,6 +69,14 @@ LABELS = {
     "materiality": "Materiality threshold",
     "connector": "Connector",
     "run_id": "Run id",
+    "attachment_id": "Attachment",
+    "operation": "Document operation",
+    "table": "Table or sheet",
+    "column": "Column",
+    "compare_column": "Compare column",
+    "query": "Search term",
+    "limit": "Row limit",
+    "direction": "Sort direction",
 }
 SUGGESTIONS = {
     "special_order": [
@@ -133,6 +143,11 @@ SUGGESTIONS = {
         "Which mapping is still unapproved?",
         "Show the reconciliation gates.",
         "Preview the SAP extract.",
+    ],
+    "attachment_analysis": [
+        "Show the rows behind this figure.",
+        "Compare two columns in the file.",
+        "Which rows are highest for this column?",
     ],
     "variance": [
         "Show the audit trace.",
@@ -317,6 +332,7 @@ class Orchestrator:
         return {
             "session": session,
             "messages": self.store.messages(session_id),
+            "attachments": self.service.session_attachments(session_id),
             "capability": self.service.capability(),
         }
 
@@ -324,6 +340,74 @@ class Orchestrator:
         self._session(user, session_id)
         self.store.close_session(session_id)
         return {"session_id": session_id, "status": "closed"}
+
+    # ---------- attachments ----------
+
+    def upload_attachment(
+        self,
+        user: User,
+        filename: str,
+        raw: bytes,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        self.auth.require(user, "read")
+        if session_id:
+            self._session(user, session_id)
+        try:
+            view = self.service.create_attachment(
+                raw, filename, user=user, session_id=session_id
+            )
+        except AttachmentError as exc:
+            raise DomainError(exc.code, exc.message, exc.remediation) from exc
+        self._event(
+            "attachment.created",
+            {
+                "attachment_id": view.get("attachment_id"),
+                "name": view.get("name"),
+                "kind": view.get("kind"),
+                "session_id": session_id,
+                "user_id": user.user_id,
+            },
+        )
+        return view
+
+    def attachment(self, user: User, attachment_id: str) -> dict[str, Any]:
+        self.auth.require(user, "read")
+        record = self.service.attachment(attachment_id)
+        if record is None:
+            raise DomainError(
+                "E_ATTACHMENT_NOT_FOUND",
+                f"Attachment {attachment_id} was not found.",
+                "Upload the document again.",
+            )
+        if record.get("user_id") not in {None, user.user_id} and not user.can("admin"):
+            raise DomainError(
+                "E_AUTH_SCOPE",
+                "This attachment belongs to another user.",
+                "Upload your own copy of the document.",
+            )
+        return public_view(record, rows=20)
+
+    def _load_attachments(
+        self, user: User, attachment_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        views = []
+        for attachment_id in attachment_ids:
+            record = self.service.attachment(str(attachment_id))
+            if record is None:
+                raise DomainError(
+                    "E_ATTACHMENT_NOT_FOUND",
+                    f"Attachment {attachment_id} was not found.",
+                    "Upload the document again and ask the question in the same message.",
+                )
+            if record.get("user_id") not in {None, user.user_id} and not user.can("admin"):
+                raise DomainError(
+                    "E_AUTH_SCOPE",
+                    "An attachment in this message belongs to another user.",
+                    "Upload your own copy of the document.",
+                )
+            views.append(public_view(record, rows=8))
+        return views
 
     # ---------- planning ----------
 
@@ -333,24 +417,50 @@ class Orchestrator:
         session_id: str,
         text: str,
         model: str | None = None,
+        attachment_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         self._session(user, session_id)
         self.auth.require(user, "read")
         text = (text or "").strip()
+        attachment_views = self._load_attachments(user, attachment_ids or [])
+        if not text and attachment_views:
+            text = "Summarise the attached file."
         if not text:
             raise DomainError(
                 "E_EMPTY_MESSAGE",
                 "The question is empty.",
-                "Ask about a variance, a special order, ABC, the budget, performance, alerts, or group reporting.",
+                "Ask about a variance, a special order, ABC, the budget, performance, alerts, "
+                "group reporting, or an attached document.",
             )
-        self.store.add_message(session_id, "user", text)
+        self.store.add_message(
+            session_id,
+            "user",
+            text,
+            attachments=[
+                {
+                    key: view.get(key)
+                    for key in ("attachment_id", "name", "kind", "size", "pages", "ocr")
+                }
+                for view in attachment_views
+            ],
+        )
         hints: dict[str, Any] | None = None
         model_error: str | None = None
         if model and model != "deterministic":
-            hints = self.llm.interpret(text, dataset_catalog(self.service.snapshot), model=model)
+            hints = self.llm.interpret(
+                text,
+                dataset_catalog(self.service.snapshot, attachment_views),
+                model=model,
+            )
             if hints is None:
                 model_error = self.llm.last_error or "The local model did not return a usable plan."
-        plan = plan_message(self.service.snapshot, text, session_id=session_id, hints=hints)
+        plan = plan_message(
+            self.service.snapshot,
+            text,
+            session_id=session_id,
+            hints=hints,
+            attachments=attachment_views,
+        )
         plan["question"] = text
         if model_error:
             plan["planner_note"] = (
@@ -394,6 +504,7 @@ class Orchestrator:
         response: dict[str, Any] = {
             "session_id": session_id,
             "message": stored_assistant,
+            "attachments": attachment_views,
             "plan_id": plan["plan_id"],
             "status": status,
             "plan": {
@@ -529,6 +640,23 @@ class Orchestrator:
             source = assumption.get("source") if assumption else (
                 "lookup" if key.endswith("_id") else "user_explicit"
             )
+            if plan.get("intent") == "attachment_analysis" and key == "attachment_id":
+                record = self.service.attachment(str(value))
+                rows.append(
+                    {
+                        "key": key,
+                        "label": label_map[key],
+                        "value": record.get("name") if record else value,
+                        "source": source or "user_explicit",
+                        "confirm": False,
+                        "editable": False,
+                    }
+                )
+                continue
+            if plan.get("intent") == "attachment_analysis" and key in {
+                "table", "column", "compare_column", "limit", "direction"
+            }:
+                source = "lookup"
             if key == "overlay" and isinstance(value, dict):
                 for driver, change in value.items():
                     rows.append(
@@ -736,6 +864,19 @@ class Orchestrator:
         common = {"question": plan.get("question"), "user": user, "plan_id": plan.get("plan_id")}
         record = intent not in READ_ONLY_INTENTS
 
+        if intent == "attachment_analysis":
+            return svc.run_attachment_analysis(
+                attachment_id=str(args.get("attachment_id", "")),
+                operation=str(args.get("operation", "profile")),
+                table=args.get("table"),
+                column=args.get("column"),
+                compare_column=args.get("compare_column"),
+                query=args.get("query"),
+                limit=int(args.get("limit", 5)),
+                direction=str(args.get("direction", "top")),
+                **common,
+            )
+
         if intent == "special_order":
             decision = str(args.get("decision_type", "special_order"))
             payload = dict(args)
@@ -894,6 +1035,8 @@ class Orchestrator:
                 "customer_id": meta.get("customer_id") or args.get("customer_id"),
                 "division_id": meta.get("division_id") or args.get("division_id"),
                 "basis": meta.get("basis") or args.get("basis"),
+                "attachment_id": meta.get("attachment_id") or args.get("attachment_id"),
+                "attachment_name": meta.get("attachment_name"),
                 "snapshot_id": self.service.snapshot.snapshot_id,
                 "dataset": self.service.snapshot.dataset_name,
                 "currency": self.service.snapshot.currency,
@@ -974,6 +1117,55 @@ class Orchestrator:
                         {"key": "value", "label": "Value", "type": "number"},
                         {"key": "unit", "label": "Unit", "type": "text"},
                     ],
+                )
+
+        if intent == "attachment_analysis":
+            if meta.get("profile"):
+                add(
+                    "doc_profile",
+                    "Column profile",
+                    meta["profile"],
+                    [
+                        {"key": "column", "label": "Column", "type": "text"},
+                        {"key": "count", "label": "Values", "type": "qty"},
+                        {"key": "sum", "label": "Total", "type": "number"},
+                        {"key": "mean", "label": "Average", "type": "number"},
+                        {"key": "min", "label": "Lowest", "type": "number"},
+                        {"key": "max", "label": "Highest", "type": "number"},
+                        {"key": "unit", "label": "Unit", "type": "text"},
+                    ],
+                )
+            headers = [header for header in (meta.get("headers") or []) if header]
+            rows = meta.get("rows") or []
+            if rows and headers:
+                columns = [{"key": "row", "label": "Row", "type": "text"}]
+                columns += [{"key": header, "label": header, "type": "text"} for header in headers]
+                add("doc_rows", "Rows read from the file", rows, columns)
+            elif rows:
+                first = rows[0]
+                columns = [
+                    {"key": key, "label": str(key).title(), "type": "text"}
+                    for key in first
+                ]
+                add("doc_rows", "Rows read from the file", rows, columns)
+            if meta.get("figures"):
+                add(
+                    "doc_figures",
+                    "Figures printed in the file",
+                    meta["figures"],
+                    [
+                        {"key": "printed", "label": "Printed as", "type": "text"},
+                        {"key": "display", "label": "Read as", "type": "text"},
+                        {"key": "unit", "label": "Unit", "type": "text"},
+                        {"key": "context", "label": "Context", "type": "text"},
+                    ],
+                )
+            if meta.get("quotes"):
+                add(
+                    "doc_quotes",
+                    "Passages used",
+                    [{"passage": quote} for quote in meta["quotes"]],
+                    [{"key": "passage", "label": "Passage", "type": "text"}],
                 )
 
         if intent == "variance_analysis":

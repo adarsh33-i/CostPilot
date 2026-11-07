@@ -22,6 +22,7 @@ every number by hand.
 | --- | --- |
 | Engine | Decimal money policy, typed calc steps, versioned rule registry, slot-only narration, result validation |
 | Data | Canonical snapshot loader, manifest hash, ten ingestion gates, account registry, capability card, templates, validated XLSX/CSV upload with activation and history |
+| Attachments | XLSX, CSV, DOCX, PDF, text/Markdown/JSON and screenshots; extraction with OCR fallback; deterministic sum, average, min/max, count, difference, ranking, search and grounded quotes |
 | Variance | Material, labour, overhead, flexible budget, account flux, variable-to-absorption bridge |
 | Decisions | Seven workflows: special order, make-or-buy, add-or-drop, sell-or-process, shutdown, product mix, CVP |
 | Profitability | Activity-based costing, time-driven ABC with unused capacity, customer profitability with cost to serve |
@@ -182,6 +183,18 @@ drawer shows the audit chain; the sources drawer previews read-only connector ex
 and mapping proposals. The uploaded dataset is activated for the whole service, so a
 new question uses it immediately.
 
+### Attach a document
+
+The paperclip in the composer, a drag onto the thread, or a pasted screenshot attaches
+a file to the conversation. The chip shows its kind, size and what was read, and it
+stays available for follow-up questions until you remove it. Spreadsheet questions are
+answered by the document rules, not by a model: totals, averages, min/max, counts,
+column differences, rankings and row searches all produce a parameter sheet, and the
+run is sealed like any other analysis. For a Word file, PDF or screenshot, the engine
+quotes the relevant passages and records each printed figure as a fact with its unit
+and context. Unsupported, empty, oversized or OCR-less files fail with a typed error
+and a retry or remove control, never a silent empty answer.
+
 ### Bring your own data
 
 The bundled Northline dataset is a sample, not a requirement. In the dataset drawer,
@@ -261,6 +274,27 @@ endpoints: `GET /v1/models`, `GET /v1/capabilities`, `GET /v1/runs`, `GET /v1/ru
 `GET /v1/runs/{id}/export?format=xlsx|pdf|json`, `GET /v1/audit/verify`,
 `GET /v1/connectors`, `GET /v1/alerts/rules`, `GET /v1/registry/accounts`.
 
+Attachment endpoints:
+
+- `POST /v1/attachments` — multipart `file` (optional `session_id`); returns the
+  extracted preview, SHA-256, tables and warnings
+- `GET /v1/attachments/{id}` — the owner or an admin can read the preview again
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/v1/attachments \
+  -H "authorization: Bearer $TOKEN" \
+  -F 'file=@/absolute/path/to/month-end-costs.xlsx'
+```
+
+Pass the returned `attachment_id` values in the message body. The question may be
+empty, in which case CostPilot uses "Summarise the attached file.":
+
+```bash
+curl -s -X POST "http://127.0.0.1:8000/v1/sessions/$SESSION/messages" \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"text":"What is the difference between total Actual and Budget in the attached sheet?","attachment_ids":["att_..."]}'
+```
+
 Dataset endpoints:
 
 - `GET /v1/datasets` — active snapshot, history, accepted formats, template link
@@ -305,10 +339,15 @@ chosen — maps natural-language questions to registered tools. Examples:
 - `Division performance for DIV-01`
 - `Monitor material price variance at PLT-01 with materiality 75000`
 - `Group report for 2026-09`
+- `What is the difference between total Actual and Budget in the attached workbook?`
+- `Average margin percent in the attached sheet`
+- `Which rows are highest for Actual in the attached file?`
+- `What did the attached PDF say about unused capacity?`
 
 An out-of-scope customer returns an explicit 409 with the customers that are in scope.
 A scenario driver expressed as a percentage is converted to a fraction; a raw driver
-above 100% is rejected rather than silently multiplied by 100.
+above 100% is rejected rather than silently multiplied by 100. A document question
+without a file asks for one, and two unnamed attachments ask which file to read.
 
 ## Verify
 
@@ -323,12 +362,15 @@ The suite covers the golden variance and decision numbers, every variance formul
 ten gates, hash-chain integrity and re-performance, all Phase 2 engines, the planner,
 narration validation, RBAC and scope, the v1 HTTP flow, exports, connectors, uploads,
 the local-model contract (with the HTTP call stubbed, so no network is needed), and the
-command line.
+command line. Attachment coverage adds extraction for XLSX, CSV, DOCX, PDF and text,
+every document operation and its error paths, planner routing and clarification,
+upload → plan → confirm → trace → re-performance, ownership and typed upload errors.
 
 ## Layout
 
 ```
-costpilot/engine/       money, trace, narration, validation, rulebook
+costpilot/data/         loader, gates, capability, upload extraction, document extraction
+costpilot/engine/       money, trace, narration, validation, rulebook, document analysis
 costpilot/engine/variance/   material, labour, overhead, flexible budget, flux
 costpilot/engine/decisions/  seven workflows
 costpilot/engine/costing/    variable-to-absorption bridge
@@ -382,6 +424,11 @@ does not create a duplicate.
   reported. Accepted snapshots are stored under `COSTPILOT_DATASETS` (default
   `/Users/adarshahebbar/Documents/CostPilot/data/datasets`), with an active pointer and
   an index, and survive restarts. Uploads need the `run` permission.
+- Chat attachments are separate from the dataset. They accept `.xlsx`, `.xlsm`, `.csv`,
+  `.docx`, `.pdf`, `.txt`, `.md`, `.json`, and the common image formats (OCR), capped at
+  25 MB, 400 rows, 40 columns, 10 tables, 180,000 characters and 40 PDF pages. The
+  extract stays on the server; the chat sees a short preview. A document figure is
+  reported as printed, and lakh/crore scaling happens once in the engine.
 - One currency, one scarce resource per product-mix run, no FX translation.
 - Account flux is level B: no price/usage split is fabricated, and the residual is
   labelled unexplained.
@@ -401,3 +448,4 @@ does not create a duplicate.
 - [ADR 0004: read-only connectors](docs/adr/0004-read-only-connectors.md)
 - [ADR 0005: local models plan and narrate](docs/adr/0005-local-model-planning.md)
 - [ADR 0006: validated dataset uploads](docs/adr/0006-validated-dataset-uploads.md)
+- [ADR 0007: attachment analysis](docs/adr/0007-attachment-analysis.md)

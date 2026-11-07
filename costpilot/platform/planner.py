@@ -7,6 +7,7 @@ import secrets
 from decimal import Decimal
 from typing import Any
 
+from costpilot.data.documents import choose_table, find_column
 from costpilot.data.loader import Snapshot
 
 PLANNER_VERSION = "1.0.0"
@@ -120,12 +121,122 @@ def _serialize(value: Any) -> Any:
     return value
 
 
+ATTACHMENT_REFERENCE = (
+    "attached", "attachment", "this document", "the document", "this file", "the file",
+    "this pdf", "the pdf", "in the image", "screenshot", "uploaded", "spreadsheet",
+)
+ATTACHMENT_OPERATIONS = {"profile", "sum", "mean", "min", "max", "count", "difference", "top", "search", "ask"}
+COLUMN_OPERATIONS = {"sum", "mean", "min", "max", "count", "difference", "top"}
+
+
+def _headers(attachment: dict[str, Any], numeric_only: bool = False) -> list[str]:
+    from costpilot.data.documents import numeric_headers
+
+    rows: list[str] = []
+    for table in attachment.get("tables") or []:
+        source = numeric_headers(table) if numeric_only else table.get("headers", [])
+        for header in source:
+            if header not in rows:
+                rows.append(header)
+    return rows
+
+
+def _mentioned_headers(text: str, attachment: dict[str, Any], numeric_only: bool = False) -> list[str]:
+    found = []
+    for header in _headers(attachment, numeric_only):
+        position = text.find(header.lower())
+        if position < 0:
+            compact = re.sub(r"[^a-z0-9]", "", header.lower())
+            position = re.sub(r"[^a-z0-9]", "", text).find(compact) if len(compact) >= 4 else -1
+        if position >= 0:
+            found.append((position, header))
+    found.sort(key=lambda item: item[0])
+    return [header for _, header in found]
+
+
+def _attachment_operation(text: str, hinted: Any) -> tuple[str, bool]:
+    if isinstance(hinted, str) and hinted.lower() in ATTACHMENT_OPERATIONS:
+        return hinted.lower(), False
+    if re.search(r"\b(difference|compare|versus|vs|minus)\b|variance between", text):
+        return "difference", True
+    if re.search(r"\b(average|mean|avg)\b", text):
+        return "mean", True
+    if re.search(r"\b(top|bottom|rank)\b|which row|show rows|list rows", text):
+        return "top", True
+    if re.search(r"\b(minimum|smallest|lowest|min)\b", text):
+        return "min", True
+    if re.search(r"\b(maximum|largest|highest|max)\b", text):
+        return "max", True
+    if re.search(r"\bcount\b|how many", text):
+        return "count", True
+    if re.search(r"\b(find|search|look up)\b|rows for", text):
+        return "search", True
+    if re.search(r"\b(sum|total|totals|add up)\b", text):
+        return "sum", True
+    if re.search(r"\b(profile|summarise|summarize|describe|overview)\b|what columns|what is in", text):
+        return "profile", True
+    return "ask", False
+
+
+def _pick_query(text: str) -> str:
+    quoted = re.search(r"[\"'“”]([^\"'“”]{2,80})[\"'“”]", text)
+    if quoted:
+        return quoted.group(1).strip()
+    patterns = (
+        r"(?:about|mentioning|mentions?|contains?|containing|matching)\s+(.+)$",
+        r"(?:look up|search for)\s+(.+)$",
+        r"\bfind\s+(?:rows?\s+)?(?:for|with|where)?\s*(.+)$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip(" ?.!")
+    return text.strip()
+
+
+def _pick_attachment(
+    text: str,
+    attachments: list[dict[str, Any]],
+    hinted_id: Any,
+) -> tuple[dict[str, Any] | None, str, list[str]]:
+    if not attachments:
+        return None, "missing", []
+    if isinstance(hinted_id, str):
+        for row in attachments:
+            if row.get("attachment_id") == hinted_id:
+                return row, "user_implied", []
+    named = []
+    for row in attachments:
+        name = str(row.get("name") or "").lower()
+        stem = name.rsplit(".", 1)[0]
+        if (name and name in text) or (len(stem) >= 4 and stem in text):
+            named.append(row)
+    if len(named) == 1:
+        return named[0], "user_explicit", []
+    if len(named) > 1:
+        return None, "ambiguous", [str(row.get("name")) for row in named]
+    scored = []
+    for row in attachments:
+        hits = len(_mentioned_headers(text, row))
+        if hits:
+            scored.append((hits, row))
+    if scored:
+        best = max(score for score, _ in scored)
+        leaders = [row for score, row in scored if score == best]
+        if len(leaders) == 1:
+            return leaders[0], "user_implied", []
+    if len(attachments) == 1:
+        return attachments[0], "engine_default", []
+    return None, "ambiguous", [str(row.get("name")) for row in attachments]
+
+
 def plan_message(
     snapshot: Snapshot,
     text: str,
     *,
     session_id: str | None = None,
     hints: dict[str, Any] | None = None,
+    attachments: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     lowered = text.lower().strip()
     hints = hints or {}
@@ -384,7 +495,8 @@ def plan_message(
         "variance_analysis", "costing_bridge", "special_order", "abc_profitability",
         "tdabc", "customer_profitability", "budget_chain", "budget_scenario",
         "rolling_forecast", "forecast_quality", "performance_eval", "monitoring",
-        "group_report", "connector_preview", "describe_dataset", "clarify",
+        "group_report", "connector_preview", "describe_dataset", "attachment_analysis",
+        "clarify",
     }
     if (
         hinted_intent in known_intents
@@ -407,7 +519,53 @@ def plan_message(
         else:
             clarification = None
 
+    attachments = [row for row in (attachments or []) if isinstance(row, dict)]
+    attachment_choice: dict[str, Any] | None = None
+    attachment_source = "missing"
+    operation, operation_explicit = _attachment_operation(lowered, slots.get("operation"))
+    attachment_ref = any(phrase in lowered for phrase in ATTACHMENT_REFERENCE)
+    if not attachments:
+        if attachment_ref or hinted_intent == "attachment_analysis":
+            intent = "attachment_analysis"
+            missing.append("attachment_id")
+            clarification = {
+                "question": (
+                    "There is no file attached to this message. Upload the workbook, Word "
+                    "document, PDF or screenshot and ask again."
+                ),
+                "options": [
+                    "Upload a workbook, Word file, PDF or screenshot",
+                    "Ask about the loaded dataset instead",
+                ],
+            }
+            confidence = Decimal("0.35")
+    else:
+        choice, attachment_source, ambiguous = _pick_attachment(
+            lowered, attachments, slots.get("attachment_id")
+        )
+        attachment_choice = choice
+        use_attachment = (
+            hinted_intent == "attachment_analysis"
+            or attachment_ref
+            or choice is None
+            or (operation_explicit and operation in {"difference", "sum", "mean", "min", "max", "count", "top", "search"} and attachment_source == "user_explicit")
+        )
+        if intent == "clarify" and attachment_source == "engine_default":
+            use_attachment = True
+        if use_attachment:
+            intent = "attachment_analysis"
+            if choice is None:
+                missing.append("attachment_id")
+                clarification = {
+                    "question": "More than one file is attached. Which one should I analyse?",
+                    "options": ambiguous[:4] or [str(row.get("name")) for row in attachments][:4],
+                }
+                confidence = Decimal("0.4")
+            else:
+                clarification = None
+
     tool_by_intent = {
+        "attachment_analysis": "run_attachment_analysis",
         "describe_dataset": "describe_dataset",
         "variance_analysis": "run_variance_analysis",
         "costing_bridge": "run_costing_bridge",
@@ -428,6 +586,95 @@ def plan_message(
         "clarify": "clarify",
     }
     tool = tool_by_intent[intent]
+
+    if intent == "attachment_analysis" and attachment_choice:
+        arguments["attachment_id"] = attachment_choice["attachment_id"]
+        arguments["operation"] = operation
+        tables = attachment_choice.get("tables") or []
+        table_name = None
+        hinted_table = slots.get("table")
+        if hinted_table:
+            for table in tables:
+                if table["name"].lower() == str(hinted_table).lower():
+                    table_name = table["name"]
+                    break
+        if table_name is None:
+            for table in tables:
+                if table["name"].lower() in lowered:
+                    table_name = table["name"]
+                    break
+        if table_name is None and tables and operation != "ask":
+            table_name = tables[0]["name"]
+        if table_name:
+            arguments["table"] = table_name
+        table_record = choose_table(attachment_choice, table_name)
+
+        numeric_operation = operation in COLUMN_OPERATIONS
+        mentioned = _mentioned_headers(lowered, attachment_choice, numeric_only=numeric_operation)
+        hinted_column = slots.get("column")
+        column = None
+        if hinted_column and table_record is not None:
+            column = find_column(table_record, hinted_column)
+        if column is None and mentioned:
+            column = mentioned[0]
+        hinted_compare = slots.get("compare_column")
+        compare_column = None
+        if hinted_compare and table_record is not None:
+            compare_column = find_column(table_record, hinted_compare)
+        if compare_column is None and len(mentioned) > 1:
+            compare_column = mentioned[1]
+        if column:
+            arguments["column"] = column
+        if operation == "difference" and compare_column and compare_column != column:
+            arguments["compare_column"] = compare_column
+        if operation in {"search", "ask"}:
+            arguments["query"] = slots.get("query") or _pick_query(text)
+        if operation == "top":
+            limit_match = re.search(r"\btop\s+(\d{1,2})\b", lowered)
+            if slots.get("limit"):
+                arguments["limit"] = int(slots["limit"])
+            elif limit_match:
+                arguments["limit"] = max(1, min(int(limit_match.group(1)), 20))
+            if "bottom" in lowered or "lowest" in lowered or "smallest" in lowered:
+                arguments["direction"] = "bottom"
+        if numeric_operation and table_record is not None and not column:
+            options = _headers(attachment_choice, numeric_only=True)[:3]
+            missing.append("column")
+            clarification = {
+                "question": f"Which column should I use for the {operation}?",
+                "options": options or ["Upload a file with a numeric column"],
+            }
+            confidence = Decimal("0.4")
+        if operation == "difference" and table_record is not None and column and not compare_column:
+            options = [
+                item for item in _headers(attachment_choice, numeric_only=True) if item != column
+            ][:3]
+            missing.append("compare_column")
+            clarification = {
+                "question": f"Which column should I subtract from {column}?",
+                "options": options or ["Upload a file with two numeric columns"],
+            }
+            confidence = Decimal("0.4")
+        assumptions.append(
+            {
+                "key": "attachment_id",
+                "text": f"The analysis reads the attached file {attachment_choice.get('name')!r}.",
+                "source": attachment_source if attachment_source != "missing" else "engine_default",
+                "evidence": "attachment extract",
+                "confidence": "0.95",
+                "confirm": False,
+            }
+        )
+        assumptions.append(
+            {
+                "key": "operation",
+                "text": f"The registered document operation is {operation}.",
+                "source": "user_explicit" if operation_explicit else "engine_default",
+                "evidence": "question text" if operation_explicit else "attachment analysis policy",
+                "confidence": "0.9" if operation_explicit else "0.8",
+                "confirm": False,
+            }
+        )
 
     if intent in {
         "variance_analysis", "costing_bridge", "special_order", "performance_eval",
@@ -564,12 +811,18 @@ def plan_message(
     status = "needs_clarification" if clarification else (
         "needs_confirmation" if requires_confirmation else "ready"
     )
-    rationale = (
-        f"Matched {intent.replace('_', ' ')} from the question and resolved the period, plant and product "
-        "from the dataset. All numbers will come from the engine."
-        if intent != "clarify"
-        else "The question did not map to a single analysis."
-    )
+    if intent == "attachment_analysis" and attachment_choice:
+        rationale = (
+            f"Matched an attachment analysis on {attachment_choice.get('name')!r}. The engine reads the "
+            "printed values, cites the attachment, and never estimates a missing figure."
+        )
+    else:
+        rationale = (
+            f"Matched {intent.replace('_', ' ')} from the question and resolved the period, plant and product "
+            "from the dataset. All numbers will come from the engine."
+            if intent != "clarify"
+            else "The question did not map to a single analysis."
+        )
     return {
         "plan_id": "plan_" + secrets.token_hex(6),
         "session_id": session_id,
