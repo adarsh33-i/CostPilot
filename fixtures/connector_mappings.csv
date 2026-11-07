@@ -1,0 +1,19 @@
+source_system,source_account,source_name,target_account,status,approved_by,contract_version
+netsuite,40010,Product revenue,4010,approved,controller.demo,1
+netsuite,50010,Direct materials,5010,approved,controller.demo,1
+netsuite,50020,Direct labour,5020,approved,controller.demo,1
+netsuite,50030,Variable overhead,5030,approved,controller.demo,1
+netsuite,50040,Fixed overhead,5040,approved,controller.demo,1
+netsuite,60010,Selling and distribution,6010,approved,controller.demo,1
+sap,400000,Erloese,4010,approved,controller.demo,1
+sap,500000,Materialkosten,5010,approved,controller.demo,1
+sap,500100,Fertigungslohn,5020,approved,controller.demo,1
+sap,500200,Variable Gemeinkosten,5030,approved,controller.demo,1
+sap,500300,Fixe Gemeinkosten,5040,approved,controller.demo,1
+sap,600000,Vertriebskosten,6010,approved,controller.demo,1
+flatfile,4010,Revenue,4010,approved,controller.demo,1
+flatfile,5010,Direct materials,5010,approved,controller.demo,1
+flatfile,5020,Direct labour,5020,approved,controller.demo,1
+flatfile,5030,Variable overhead,5030,approved,controller.demo,1
+flatfile,5040,Fixed overhead,5040,approved,controller.demo,1
+flatfile,6010,Selling and distribution,6010,approved,controller.demo,1

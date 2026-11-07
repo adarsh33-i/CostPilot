@@ -1,0 +1,7 @@
+customer_id,name,segment,region,channel
+CUS-01,Arcline OEM,enterprise,west,direct
+CUS-02,Vector Robotics,enterprise,south,direct
+CUS-03,Meridian Pumps,mid-market,west,distributor
+CUS-04,Kestrel Automation,mid-market,north,direct
+CUS-05,Orbit Drives,small,east,online
+CUS-06,Terra Motion,small,south,distributor

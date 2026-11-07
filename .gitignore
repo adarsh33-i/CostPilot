@@ -6,7 +6,6 @@ __pycache__/
 *.egg-info/
 build/
 dist/
-data/audit.db
-data/audit.db-*
+data/
 .DS_Store
 .env

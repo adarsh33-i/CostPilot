@@ -9,14 +9,18 @@ from typing import Any
 
 from costpilot import ENGINE_VERSION, RULEBOOK_VERSION, SCHEMA_VERSION
 from costpilot.audit import AuditStore, compare_results
+from costpilot.connectors import CONNECTORS, MappingRegistry, run_connector
 from costpilot.data.capability import build_capability
 from costpilot.data.loader import Snapshot, load_snapshot
+from costpilot.engine import abc, budgets, group, monitoring, performance
 from costpilot.engine.costing import bridge
 from costpilot.engine.decisions import SUPPORTED, run_decision
 from costpilot.engine.errors import DomainError
 from costpilot.engine.money import dec, trace_str
 from costpilot.engine.rules import all_rules, registry_version
 from costpilot.engine.variance import flexible_budget, flux, labor, material, overhead
+from costpilot.platform.registry import RegistryService
+from costpilot.platform.store import PlatformStore
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,9 +30,19 @@ def default_fixtures_path() -> Path:
 
 
 class ToolService:
-    def __init__(self, snapshot: Snapshot, audit: AuditStore) -> None:
+    def __init__(
+        self,
+        snapshot: Snapshot,
+        audit: AuditStore,
+        store: PlatformStore | None = None,
+    ) -> None:
         self.snapshot = snapshot
         self.audit = audit
+        self.store = store or PlatformStore(
+            os.environ.get("COSTPILOT_PLATFORM_DB", str(ROOT / "data" / "platform.db"))
+        )
+        self.mappings = MappingRegistry(snapshot, self.store)
+        self.registry = RegistryService(snapshot, self.store)
 
     @classmethod
     def from_env(cls) -> ToolService:
@@ -63,10 +77,11 @@ class ToolService:
         return {
             "snapshot_id": self.snapshot.snapshot_id,
             "manifest_hash": self.snapshot.manifest_hash,
-            "registry_version": registry_version(),
+            "rule_registry_version": registry_version(),
             "engine_version": ENGINE_VERSION,
             "rulebook_version": RULEBOOK_VERSION,
             "schema_version": SCHEMA_VERSION,
+            "registry_version": self.registry.version(),
         }
 
     # ---------- resolution and confirmation ----------
@@ -149,6 +164,8 @@ class ToolService:
         confirmation: dict[str, Any] | None = None,
         question: str | None = None,
         record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
     ) -> dict[str, Any]:
         if decision_type not in SUPPORTED:
             raise DomainError(
@@ -168,6 +185,11 @@ class ToolService:
         resolved_arguments = dict(arguments)
         if decision_type == "special_order":
             resolved_arguments, sheet = self.resolve_special_order(resolved_arguments)
+        self._scope(
+            user,
+            resolved_arguments.get("plant_id"),
+            resolved_arguments.get("product_id"),
+        )
 
         result = run_decision(decision_type, resolved_arguments, confirmed=True)
         validation = result.meta.get("validation", {})
@@ -187,6 +209,8 @@ class ToolService:
                 validation=validation,
                 pins=self.pins(),
                 confirmation=confirmation or {},
+                user=self._audit_user(user),
+                plan_id=plan_id,
             )
 
         envelope = {
@@ -356,11 +380,14 @@ class ToolService:
         period_id: str | None = None,
         question: str | None = None,
         record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
     ) -> dict[str, Any]:
         defaults = build_capability(self.snapshot)["demo_defaults"]
         product_id = product_id or defaults["product_id"]
         plant_id = plant_id or defaults["plant_id"]
         period_id = period_id or defaults["period_id"]
+        self._scope(user, plant_id, product_id)
         standard = self.snapshot.standard(period_id, plant_id, product_id)
         actual = self.snapshot.actual(period_id, plant_id, product_id)
         components = self._variance_components(product_id, plant_id, period_id)
@@ -403,6 +430,8 @@ class ToolService:
                 result={"components": payload, "summary": summary},
                 validation={"all_components_pass": validation},
                 pins=self.pins(),
+                user=self._audit_user(user),
+                plan_id=plan_id,
             )
 
         return {
@@ -433,11 +462,14 @@ class ToolService:
         variable_operating_income: str | None = None,
         question: str | None = None,
         record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
     ) -> dict[str, Any]:
         defaults = build_capability(self.snapshot)["demo_defaults"]
         product_id = product_id or defaults["product_id"]
         plant_id = plant_id or defaults["plant_id"]
         period_id = period_id or defaults["period_id"]
+        self._scope(user, plant_id, product_id)
         standard = self.snapshot.standard(period_id, plant_id, product_id)
         inventory = self.snapshot.inventory_line(period_id, plant_id, product_id)
         actual = self.snapshot.actual(period_id, plant_id, product_id)
@@ -481,6 +513,8 @@ class ToolService:
                 result=result_payload,
                 validation=result.meta.get("validation", {}),
                 pins=self.pins(),
+                user=self._audit_user(user),
+                plan_id=plan_id,
             )
         return {
             "result": result_payload,
@@ -494,6 +528,558 @@ class ToolService:
                 "event_hash": run_ref.event_hash if run_ref else None,
             },
             "pins": self.pins(),
+        }
+
+    # ---------- Phase 2 tools ----------
+
+    def _defaults(self) -> dict[str, Any]:
+        return build_capability(self.snapshot)["demo_defaults"]
+
+    def _scope(self, user: Any | None, plant_id: str | None, product_id: str | None = None) -> None:
+        if user is None:
+            return
+        scope = getattr(user, "scope", None)
+        if scope is not None and not scope.allows(plant_id=plant_id, product_id=product_id):
+            raise DomainError(
+                "E_AUTH_SCOPE",
+                "The requested plant or product is outside this user's data scope.",
+                "Choose a row inside your scope, or ask an administrator to widen it.",
+            )
+
+    @staticmethod
+    def _audit_user(user: Any | None) -> dict[str, Any] | None:
+        if user is None:
+            return None
+        if hasattr(user, "public"):
+            return user.public()
+        if isinstance(user, dict):
+            return user
+        return {"user_id": str(user)}
+
+    def _seal(
+        self,
+        *,
+        tool: str,
+        intent: str,
+        arguments: dict[str, Any],
+        result: Any,
+        question: str | None,
+        user: Any | None,
+        plan_id: str | None = None,
+        confirmation: dict[str, Any] | None = None,
+        record: bool = True,
+    ) -> dict[str, Any]:
+        result_payload = result.to_dict()
+        validation = result.meta.get("validation", {})
+        run_ref = None
+        if record:
+            run_ref = self.audit.append(
+                tool=tool,
+                question=question or intent.replace("_", " ").title(),
+                intent=intent,
+                arguments=arguments,
+                result=result_payload,
+                validation=validation,
+                pins=self.pins(),
+                confirmation=confirmation or {},
+                user=self._audit_user(user),
+                plan_id=plan_id,
+            )
+        return {
+            "result": result_payload,
+            "facts": result_payload["facts"],
+            "assumptions": result_payload["assumptions"],
+            "warnings": result_payload["warnings"],
+            "remediation": result_payload["remediation"],
+            "validation": validation,
+            "snapshot_id": self.snapshot.snapshot_id,
+            "trace_ref": {
+                "run_id": run_ref.run_id if run_ref else None,
+                "event_hash": run_ref.event_hash if run_ref else None,
+            },
+            "pins": self.pins(),
+        }
+
+    def run_abc_profitability(
+        self,
+        *,
+        period_id: str | None = None,
+        plant_id: str | None = None,
+        basis: str = "labor_hours",
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        defaults = self._defaults()
+        period_id = period_id or defaults["period_id"]
+        plant_id = plant_id or defaults["plant_id"]
+        self._scope(user, plant_id)
+        result = abc.run_abc_profitability(
+            self.snapshot, period_id=period_id, plant_id=plant_id, basis=basis
+        )
+        return self._seal(
+            tool="run_abc_profitability",
+            intent="abc_profitability",
+            arguments={"period_id": period_id, "plant_id": plant_id, "basis": basis},
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_tdabc(
+        self,
+        *,
+        period_id: str | None = None,
+        plant_id: str | None = None,
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        defaults = self._defaults()
+        period_id = period_id or defaults["period_id"]
+        plant_id = plant_id or defaults["plant_id"]
+        self._scope(user, plant_id)
+        result = abc.run_tdabc(self.snapshot, period_id=period_id, plant_id=plant_id)
+        return self._seal(
+            tool="run_tdabc",
+            intent="tdabc",
+            arguments={"period_id": period_id, "plant_id": plant_id},
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_customer_profitability(
+        self,
+        *,
+        period_id: str | None = None,
+        plant_id: str | None = None,
+        customer_id: str | None = None,
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        defaults = self._defaults()
+        period_id = period_id or defaults["period_id"]
+        plant_id = plant_id or defaults["plant_id"]
+        self._scope(user, plant_id)
+        result = abc.run_customer_profitability(
+            self.snapshot,
+            period_id=period_id,
+            plant_id=plant_id,
+            selected_customer=customer_id,
+        )
+        return self._seal(
+            tool="run_customer_profitability",
+            intent="customer_profitability",
+            arguments={
+                "period_id": period_id,
+                "plant_id": plant_id,
+                "customer_id": customer_id or "ALL",
+            },
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_budget(
+        self,
+        *,
+        period_id: str | None = None,
+        plant_id: str | None = None,
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        defaults = self._defaults()
+        period_id = period_id or defaults["period_id"]
+        if plant_id:
+            self._scope(user, plant_id)
+        result = budgets.run_budget_chain(self.snapshot, period_id=period_id, plant_id=plant_id)
+        return self._seal(
+            tool="run_budget_chain",
+            intent="budget_chain",
+            arguments={"period_id": period_id, "plant_id": plant_id or "ALL"},
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_scenario(
+        self,
+        *,
+        period_id: str | None = None,
+        plant_id: str | None = None,
+        overlay: dict[str, Any] | None = None,
+        label: str = "Scenario",
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        defaults = self._defaults()
+        period_id = period_id or defaults["period_id"]
+        if plant_id:
+            self._scope(user, plant_id)
+        result = budgets.run_budget_scenario(
+            self.snapshot,
+            period_id=period_id,
+            plant_id=plant_id,
+            overlay=overlay or {},
+            label=label,
+        )
+        return self._seal(
+            tool="run_budget_scenario",
+            intent="budget_scenario",
+            arguments={
+                "period_id": period_id,
+                "plant_id": plant_id or "ALL",
+                "overlay": overlay or {},
+                "label": label,
+            },
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_rolling_forecast(
+        self,
+        *,
+        plant_id: str | None = None,
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        if plant_id:
+            self._scope(user, plant_id)
+        result = budgets.run_rolling_forecast(self.snapshot, plant_id=plant_id)
+        return self._seal(
+            tool="run_rolling_forecast",
+            intent="rolling_forecast",
+            arguments={"plant_id": plant_id or "ALL"},
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_forecast_quality(
+        self,
+        *,
+        plant_id: str | None = None,
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        if plant_id:
+            self._scope(user, plant_id)
+        result = budgets.run_forecast_quality(self.snapshot, plant_id=plant_id)
+        return self._seal(
+            tool="run_forecast_quality",
+            intent="forecast_quality",
+            arguments={"plant_id": plant_id or "ALL"},
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_performance(
+        self,
+        *,
+        period_id: str | None = None,
+        division_id: str | None = None,
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        defaults = self._defaults()
+        period_id = period_id or defaults["period_id"]
+        division_id = division_id or defaults.get("division_id", "DIV-01")
+        asset = self.snapshot.assets.get((period_id, division_id))
+        self._scope(user, asset.plant_id if asset else None)
+        result = performance.run_performance_eval(
+            self.snapshot, period_id=period_id, division_id=division_id
+        )
+        return self._seal(
+            tool="run_performance_eval",
+            intent="performance_eval",
+            arguments={"period_id": period_id, "division_id": division_id},
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_monitoring(
+        self,
+        *,
+        period_id: str | None = None,
+        rules: list[Any] | None = None,
+        materiality: str = "50000",
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        defaults = self._defaults()
+        period_id = period_id or defaults["period_id"]
+        result = monitoring.run_monitoring(
+            self.snapshot, period_id=period_id, rules=rules, materiality=materiality
+        )
+        for alert in result.meta.get("alerts", []):
+            plant = alert.get("plant_id")
+            if plant not in (None, "ALL"):
+                self._scope(user, str(plant))
+        return self._seal(
+            tool="run_monitoring",
+            intent="monitoring",
+            arguments={
+                "period_id": period_id,
+                "rules": rules or [],
+                "materiality": materiality,
+            },
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_group_report(
+        self,
+        *,
+        period_id: str | None = None,
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        defaults = self._defaults()
+        period_id = period_id or defaults["period_id"]
+        result = group.run_group_report(self.snapshot, period_id=period_id)
+        return self._seal(
+            tool="run_group_report",
+            intent="group_report",
+            arguments={"period_id": period_id},
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    # ---------- connectors and governance ----------
+
+    def connector_catalog(self) -> dict[str, Any]:
+        return {
+            "connectors": [
+                {
+                    "name": "netsuite",
+                    "system": "NetSuite",
+                    "mode": "read_only_extract",
+                    "contract_version": "1",
+                    "extract": "fixtures/connectors/netsuite_gl_extract.csv",
+                },
+                {
+                    "name": "sap",
+                    "system": "SAP",
+                    "mode": "read_only_extract",
+                    "contract_version": "1",
+                    "extract": "fixtures/connectors/sap_gl_extract.csv",
+                },
+                {
+                    "name": "flatfile",
+                    "system": "Flat file",
+                    "mode": "read_only_extract",
+                    "contract_version": "1",
+                    "extract": "fixtures/connectors/flat_gl_extract.csv",
+                },
+            ],
+            "write_back": False,
+            "mappings": self.mappings.all(),
+        }
+
+    def run_connector_tool(
+        self,
+        *,
+        name: str,
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        payload = run_connector(self.snapshot, self.mappings, name)
+        run_ref = None
+        if record:
+            run_ref = self.audit.append(
+                tool=f"connector:{name}",
+                question=question or f"Preview {name} connector",
+                intent="connector_preview",
+                arguments={"connector": name},
+                result=payload,
+                validation={"ok": payload["ok"], "gates": payload["gates"]},
+                pins=self.pins(),
+                user=self._audit_user(user),
+                plan_id=plan_id,
+            )
+        return {
+            "result": payload,
+            "facts": [],
+            "assumptions": [],
+            "warnings": [gate for gate in payload["gates"] if gate["status"] != "pass"],
+            "validation": {"ok": payload["ok"]},
+            "snapshot_id": self.snapshot.snapshot_id,
+            "trace_ref": {
+                "run_id": run_ref.run_id if run_ref else None,
+                "event_hash": run_ref.event_hash if run_ref else None,
+            },
+            "pins": self.pins(),
+            "read_only": True,
+        }
+
+    def propose_mapping(
+        self,
+        *,
+        source_system: str,
+        source_account: str,
+        source_name: str,
+        target_account: str,
+        user: Any | None,
+    ) -> dict[str, Any]:
+        if source_system not in CONNECTORS:
+            raise DomainError(
+                "CONNECTOR_UNKNOWN",
+                f"Unknown connector {source_system!r}.",
+                "Use one of: " + ", ".join(sorted(CONNECTORS)) + ".",
+            )
+        return self.mappings.propose(
+            source_system=source_system,
+            source_account=source_account,
+            source_name=source_name,
+            target_account=target_account,
+            proposed_by=getattr(user, "user_id", "system"),
+        )
+
+    def approve_mapping(self, proposal_id: str, user: Any | None) -> dict[str, Any]:
+        return self.mappings.approve(proposal_id, getattr(user, "user_id", "system"))
+
+    # ---------- alert rules ----------
+
+    def save_alert_rule(
+        self,
+        *,
+        text: str,
+        created_by: str,
+        period_id: str | None = None,
+        materiality: str = "50000",
+    ) -> dict[str, Any]:
+        parsed = monitoring.parse_alert_rule(text)
+        import secrets as _secrets
+
+        rule_id = "alert_" + _secrets.token_hex(6)
+        payload = {
+            "rule_id": rule_id,
+            "text": text,
+            "parsed": {
+                **{key: (str(value) if isinstance(value, Decimal) else value) for key, value in parsed.items()}
+            },
+            "period_id": period_id or self._defaults()["period_id"],
+            "materiality": materiality,
+            "created_by": created_by,
+            "enabled": True,
+        }
+        return self.store.put_object("alert_rule", rule_id, payload)
+
+    def list_alert_rules(self) -> list[dict[str, Any]]:
+        return self.store.list_objects("alert_rule")
+
+    def delete_alert_rule(self, rule_id: str) -> bool:
+        return self.store.delete_object("alert_rule", rule_id)
+
+    def run_saved_alerts(self, period_id: str | None = None, user: Any | None = None) -> dict[str, Any]:
+        rules = self.list_alert_rules()
+        enabled = [rule for rule in rules if rule.get("enabled")]
+        if enabled:
+            texts = [rule["text"] for rule in enabled]
+            materialities = [Decimal(str(rule.get("materiality", "50000"))) for rule in enabled]
+            payload = self.run_monitoring(
+                period_id=period_id or enabled[0].get("period_id"),
+                rules=texts,
+                materiality=str(min(materialities)),
+                question="Scheduled alert digest",
+                user=user,
+            )
+        else:
+            payload = self.run_monitoring(
+                period_id=period_id,
+                question="Scheduled alert digest",
+                user=user,
+            )
+        digest = {
+            "created_at": payload["result"]["meta"].get("period_id"),
+            "period_id": payload["result"]["meta"]["period_id"],
+            "active_count": payload["result"]["meta"]["active_count"],
+            "alerts": payload["result"]["meta"]["digest"],
+            "run_id": payload["trace_ref"]["run_id"],
+        }
+        self.store.put_object("alert_digest", str(digest["run_id"]), digest)
+        return payload
+
+    def alert_digests(self, limit: int = 10) -> list[dict[str, Any]]:
+        digests = self.store.list_objects("alert_digest")
+        return list(reversed(digests))[:limit]
+
+    # ---------- trace ----------
+
+    def trace(self, run_id: str) -> dict[str, Any]:
+        run = self.audit.get(run_id)
+        if run is None:
+            raise DomainError(
+                "RUN_NOT_FOUND",
+                f"Run {run_id} was not found.",
+                "Open a run from the audit drawer or list recent runs.",
+            )
+        result = run.get("result", {})
+        steps: list[dict[str, Any]] = []
+        if isinstance(result.get("steps"), list):
+            steps = result["steps"]
+        elif isinstance(result.get("components"), dict):
+            for name, component in result["components"].items():
+                for step in component.get("steps", []):
+                    steps.append({**step, "component": name})
+        return {
+            "run_id": run_id,
+            "tool": run["tool"]["name"],
+            "question": run.get("question"),
+            "pins": run.get("pins"),
+            "user": run.get("user"),
+            "steps": steps,
+            "facts": result.get("facts", []),
+            "warnings": result.get("warnings", []),
+            "validation": run.get("validation", {}),
+            "integrity": run.get("integrity"),
+            "snapshot_id": self.snapshot.snapshot_id,
         }
 
     # ---------- audit ----------
@@ -552,4 +1138,72 @@ class ToolService:
             )
             comparison = compare_results(run["result"], result.to_dict())
             return {"run_id": run_id, "tool": tool, **comparison}
-        raise DomainError("REPERFORM_UNSUPPORTED", f"Re-performance is not implemented for {tool}.")
+
+        fresh = self._reperform_payload(tool, arguments)
+        stored_payload = run["result"]
+        fresh_payload = fresh["result"]
+        comparison = compare_results(stored_payload, fresh_payload)
+        if comparison["status"] == "exact" and stored_payload != fresh_payload:
+            comparison = {
+                "status": "mismatch",
+                "mismatches": [{"step_id": "payload", "stored": "recorded", "recomputed": "different"}],
+                "display_rounding": [],
+                "missing_steps": [],
+                "extra_steps": [],
+            }
+        return {
+            "run_id": run_id,
+            "tool": tool,
+            "status": comparison["status"],
+            "comparison": comparison,
+            "pins": run.get("pins"),
+        }
+
+    def _reperform_payload(self, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Re-execute a pinned tool without writing a second audit run."""
+        period = arguments.get("period_id")
+        plant = arguments.get("plant_id")
+        if plant == "ALL":
+            plant = None
+        if tool == "run_abc_profitability":
+            return self.run_abc_profitability(
+                period_id=period, plant_id=plant, basis=arguments.get("basis", "labor_hours"), record=False
+            )
+        if tool == "run_tdabc":
+            return self.run_tdabc(period_id=period, plant_id=plant, record=False)
+        if tool == "run_customer_profitability":
+            return self.run_customer_profitability(period_id=period, plant_id=plant, record=False)
+        if tool == "run_budget_chain":
+            return self.run_budget(period_id=period, plant_id=plant, record=False)
+        if tool == "run_budget_scenario":
+            return self.run_scenario(
+                period_id=period,
+                plant_id=plant,
+                overlay=arguments.get("overlay") or {},
+                label=arguments.get("label", "Scenario"),
+                record=False,
+            )
+        if tool == "run_rolling_forecast":
+            return self.run_rolling_forecast(plant_id=plant, record=False)
+        if tool == "run_forecast_quality":
+            return self.run_forecast_quality(plant_id=plant, record=False)
+        if tool == "run_performance_eval":
+            return self.run_performance(
+                period_id=period, division_id=arguments.get("division_id"), record=False
+            )
+        if tool == "run_monitoring":
+            return self.run_monitoring(
+                period_id=period,
+                rules=arguments.get("rules") or [],
+                materiality=str(arguments.get("materiality", "50000")),
+                record=False,
+            )
+        if tool == "run_group_report":
+            return self.run_group_report(period_id=period, record=False)
+        if tool.startswith("connector:"):
+            return self.run_connector_tool(name=tool.split(":", 1)[1], record=False)
+        raise DomainError(
+            "REPERFORM_UNSUPPORTED",
+            f"Re-performance is not implemented for {tool}.",
+            "Use the trace to review the steps, or ask an administrator to add this tool.",
+        )

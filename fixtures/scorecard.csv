@@ -1,0 +1,7 @@
+kpi_id,perspective,name,owner,weight,target,actual,direction,source,controllability
+FIN-01,financial,Contribution margin ratio,plant_controller,25,0.32,,higher,snapshot:contribution_margin,controllable
+FIN-02,financial,Material variance to material budget,plant_controller,15,0.01,,lower,snapshot:material_variance_ratio,controllable
+CUS-01,customer,On-time delivery,plant_manager,20,0.95,0.93,higher,manual,controllable
+CUS-02,customer,Customer satisfaction (1-5),commercial_lead,15,4.50,4.30,higher,manual,controllable
+OPS-01,internal,First-pass yield,quality_lead,15,0.97,0.955,higher,manual,controllable
+OPS-02,internal,Safety incidents,plant_manager,10,0,1,lower,manual,controllable

@@ -1,0 +1,4 @@
+rate_id,name,rate,unit
+RATE-ORDER,Order processing,2500,INR/order
+RATE-SERVICE,Service support,6000,INR/ticket
+RATE-DELIVERY,Delivery,4000,INR/delivery

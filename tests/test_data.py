@@ -52,8 +52,8 @@ def test_manifest_hash_matches_canonical_rehash(snapshot):
     assert recomputed == snapshot.manifest_hash
 
 
-def test_all_ten_gates_pass_on_the_committed_fixture(snapshot):
-    assert [g.id for g in snapshot.gates] == [f"G{i}" for i in range(1, 11)]
+def test_all_twelve_gates_pass_on_the_committed_fixture(snapshot):
+    assert [g.id for g in snapshot.gates] == [f"G{i}" for i in range(1, 13)]
     assert all(g.status == "pass" for g in snapshot.gates), [
         (g.id, g.detail) for g in snapshot.gates if g.status != "pass"
     ]
@@ -66,6 +66,10 @@ def test_fixture_has_three_products_two_plants_three_periods(snapshot):
     assert len(snapshot.standards) == 18
     assert len(snapshot.actuals) == 18
     assert snapshot.currency == "INR"
+    assert len(snapshot.activities) == 5
+    assert len(snapshot.cost_pools) == 30
+    assert len(snapshot.customers) == 6
+    assert len(snapshot.entity_financials) == 3
 
 
 def test_capability_defaults_resolve_from_the_snapshot(snapshot):
@@ -79,7 +83,7 @@ def test_capability_defaults_resolve_from_the_snapshot(snapshot):
     assert defaults["variable_manufacturing_cost"] == "300"
     assert defaults["regular_price"] == "500"
     assert defaults["idle_capacity_units"] == "2200"
-    assert capability["analysis_ready"]["abc"] is False
+    assert capability["analysis_ready"]["abc"] is True
 
 
 def test_schema_mismatch_raises_a_remediable_error(tmp_path):
@@ -145,7 +149,7 @@ def test_mixed_currency_blocks(tmp_path):
 
     rewrite(root / "entities.csv", mutate)
     snapshot = load_snapshot(root)
-    assert gate(snapshot, "G7").status == "block"
+    assert gate(snapshot, "G8").status == "block"
 
 
 def test_untagged_account_blocks_coverage(tmp_path):
@@ -170,7 +174,7 @@ def test_price_outlier_warns_but_does_not_block(tmp_path):
 
     rewrite(root / "production_actuals.csv", mutate)
     snapshot = load_snapshot(root)
-    assert gate(snapshot, "G9").status == "warn"
+    assert gate(snapshot, "G10").status == "warn"
     assert not any(g.status == "block" for g in snapshot.gates)
 
 
@@ -178,7 +182,7 @@ def test_missing_standard_card_blocks(tmp_path):
     root = copy_fixtures(tmp_path)
     rewrite(root / "standard_costs.csv", lambda rows: rows[1:])
     snapshot = load_snapshot(root)
-    assert gate(snapshot, "G10").status == "block"
+    assert gate(snapshot, "G11").status == "block"
     assert gate(snapshot, "G4").status == "pass"
 
 

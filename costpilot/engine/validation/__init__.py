@@ -12,8 +12,10 @@ from costpilot.engine.trace import CalcResult
 PLACEHOLDER = re.compile(r"\{\{f_[a-z0-9_]+\}\}")
 DIGIT = re.compile(r"[0-9]")
 ALLOWED_UNITS = {
-    "INR", "INR/unit", "INR/hour", "INR/kg", "INR/scarce-unit", "%", "units", "kg",
-    "hours", "setups", "orders", "ratio", "times",
+    "INR", "INR/unit", "INR/hour", "INR/kg", "INR/scarce-unit", "INR/event",
+    "INR/order", "INR/ticket", "INR/delivery", "%", "units", "kg", "hours",
+    "setups", "orders", "events", "tickets", "deliveries", "inspections",
+    "ratio", "times", "score",
 }
 
 

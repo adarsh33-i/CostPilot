@@ -1,0 +1,6 @@
+activity_id,name,driver_name,driver_unit,pool_group,minutes_per_event,source
+ACT-SETUP,Machine setups,Setups,setups,manufacturing,180,Setup log
+ACT-INSPECT,Quality inspections,Inspections,inspections,manufacturing,60,Inspection log
+ACT-PO,Purchase ordering,Purchase orders,purchase orders,manufacturing,20,PO log
+ACT-ORDER,Customer order processing,Orders,orders,manufacturing,30,Order log
+ACT-ENG,Engineering support,Engineering hours,engineering hours,manufacturing,120,Engineering log

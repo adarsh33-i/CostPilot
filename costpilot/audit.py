@@ -81,6 +81,9 @@ class AuditStore:
         validation: dict[str, Any],
         pins: dict[str, Any],
         confirmation: dict[str, Any] | None = None,
+        user: dict[str, Any] | None = None,
+        plan_id: str | None = None,
+        origin: str = "user",
     ) -> RunRef:
         now = datetime.now(UTC).isoformat(timespec="milliseconds")
         run_id = "run_" + datetime.now(UTC).strftime("%Y%m%dT%H%M%S") + "_" + secrets.token_hex(4)
@@ -98,13 +101,15 @@ class AuditStore:
         core_json = canonical_json(core)
         payload = {
             "run_id": run_id,
-            "origin": "user",
             "created_at": now,
             "question": question,
             "intent": intent,
             "tool": {"name": tool, "version": "1.0.0"},
             "confirmation": confirmation or {},
             "pins": pins,
+            "origin": origin,
+            "user": user or {"user_id": "system", "role": "system"},
+            "plan_id": plan_id,
             "arguments": arguments,
             "result": result,
             "validation": validation,
@@ -152,6 +157,36 @@ class AuditStore:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def recent_runs(self, limit: int = 50, user_id: str | None = None) -> list[dict[str, Any]]:
+        """Recent run summaries with attribution for the audit drawer."""
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT run_id, created_at, tool, question, payload_json, event_hash "
+                "FROM events ORDER BY seq DESC LIMIT ?",
+                (limit * 4 if user_id else limit,),
+            ).fetchall()
+        runs: list[dict[str, Any]] = []
+        for row in rows:
+            payload = json.loads(row["payload_json"])
+            owner = (payload.get("user") or {}).get("user_id")
+            if user_id and owner not in {user_id, "system"}:
+                continue
+            runs.append(
+                {
+                    "run_id": row["run_id"],
+                    "created_at": row["created_at"],
+                    "tool": row["tool"],
+                    "question": row["question"],
+                    "intent": payload.get("intent"),
+                    "user_id": owner,
+                    "plan_id": payload.get("plan_id"),
+                    "event_hash": row["event_hash"],
+                }
+            )
+            if len(runs) >= limit:
+                break
+        return runs
 
     def verify_chain(self) -> dict[str, Any]:
         with self._lock:

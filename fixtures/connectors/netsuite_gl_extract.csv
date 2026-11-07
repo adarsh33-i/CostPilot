@@ -1,0 +1,13 @@
+period_id,plant_id,source_account,source_name,amount,currency
+2026-09,PLT-01,40010,Revenue,3367500.00,INR
+2026-09,PLT-02,40010,Revenue,3072900.00,INR
+2026-09,PLT-01,50010,Direct materials,1142407.68,INR
+2026-09,PLT-02,50010,Direct materials,1075347.96,INR
+2026-09,PLT-01,50020,Direct labour,532371.06,INR
+2026-09,PLT-02,50020,Direct labour,492329.24,INR
+2026-09,PLT-01,50030,Variable overhead,255289.90,INR
+2026-09,PLT-02,50030,Variable overhead,238950.13,INR
+2026-09,PLT-01,50040,Fixed overhead,341360.00,INR
+2026-09,PLT-02,50040,Fixed overhead,329968.00,INR
+2026-09,PLT-01,60010,Selling and distribution,126150.00,INR
+2026-09,PLT-02,60010,Selling and distribution,117525.00,INR

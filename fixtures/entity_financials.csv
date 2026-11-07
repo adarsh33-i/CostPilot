@@ -1,0 +1,4 @@
+period_id,entity_id,name,revenue,variable_income,absorption_income,inventory_change_units,fixed_oh_rate
+2026-07,ENT-02,Northline Components,1700000,850000,910000,200,300
+2026-08,ENT-02,Northline Components,1720000,860000,922000,200,300
+2026-09,ENT-02,Northline Components,1740000,870000,934000,200,300

@@ -17,7 +17,7 @@ def append(store, value="1"):
         arguments={"x": value},
         result={"value": value, "steps": []},
         validation={"failures": []},
-        pins={"engine_version": "0.3.0"},
+        pins={"engine_version": "1.0.0"},
     )
 
 

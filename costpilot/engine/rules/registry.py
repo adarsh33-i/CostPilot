@@ -52,5 +52,5 @@ def all_rules() -> list[Rule]:
 
 
 def registry_version() -> int:
-    # M0 freezes the catalogue at version 1. Additions bump this value.
-    return 1
+    # Phase 2 additions bump the catalogue to version 2.
+    return 2

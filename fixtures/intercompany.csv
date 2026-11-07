@@ -1,0 +1,7 @@
+period_id,seller_entity,buyer_entity,description,revenue,cost,status
+2026-07,ENT-01,ENT-02,Finished motors sold to distribution,420000,300000,flagged_for_review
+2026-07,ENT-02,ENT-01,Components sold to manufacturing,600000,560000,flagged_for_review
+2026-08,ENT-01,ENT-02,Finished motors sold to distribution,420000,300000,flagged_for_review
+2026-08,ENT-02,ENT-01,Components sold to manufacturing,600000,560000,flagged_for_review
+2026-09,ENT-01,ENT-02,Finished motors sold to distribution,420000,300000,flagged_for_review
+2026-09,ENT-02,ENT-01,Components sold to manufacturing,600000,560000,flagged_for_review

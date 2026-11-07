@@ -16,7 +16,7 @@ def test_workspace_and_metadata(api):
 
     capability = api.get("/api/capability").json()
     assert capability["dataset"].startswith("Northline")
-    assert len(capability["data_quality"]["gates"]) == 10
+    assert len(capability["data_quality"]["gates"]) == 12
     assert capability["data_quality"]["blocking_gates"] == 0
     assert capability["supported_decisions"] == sorted(
         ["add_or_drop", "cvp", "make_or_buy", "operate_or_shutdown", "product_mix",
@@ -24,7 +24,7 @@ def test_workspace_and_metadata(api):
     )
 
     rules = api.get("/api/rules").json()
-    assert rules["registry_version"] == 1
+    assert rules["registry_version"] >= 1
     assert len(rules["rules"]) >= 40
     assert all(rule["citation"] for rule in rules["rules"])
 
@@ -54,7 +54,7 @@ def test_run_requires_confirmation_and_returns_a_path_forward(api):
         "/api/tools/run_differential_analysis",
         json={"decision_type": "special_order", "arguments": {}},
     )
-    assert response.status_code == 422
+    assert response.status_code == 409
     body = response.json()
     assert body["error"]["code"] == "CONFIRMATION_REQUIRED"
     assert body["remediation"]

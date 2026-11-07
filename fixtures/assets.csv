@@ -1,0 +1,7 @@
+period_id,division_id,name,plant_id,beginning_assets,ending_assets,required_return,new_investment_income,new_investment_assets
+2026-07,DIV-01,Pune division,PLT-01,2400000,2600000,0.12,180000,1200000
+2026-07,DIV-02,Coimbatore division,PLT-02,1800000,2000000,0.12,110000,900000
+2026-08,DIV-01,Pune division,PLT-01,2400000,2600000,0.12,180000,1200000
+2026-08,DIV-02,Coimbatore division,PLT-02,1800000,2000000,0.12,110000,900000
+2026-09,DIV-01,Pune division,PLT-01,2400000,2600000,0.12,180000,1200000
+2026-09,DIV-02,Coimbatore division,PLT-02,1800000,2000000,0.12,110000,900000

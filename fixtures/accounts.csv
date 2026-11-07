@@ -1,7 +1,7 @@
-account_id,name,statement,behavior,directness,unit,owner
-4010,Revenue,income_statement,revenue,direct,INR,finance
-5010,Direct materials,income_statement,variable,direct,INR,cost_accounting
-5020,Direct labour,income_statement,variable,direct,INR,cost_accounting
-5030,Variable overhead,income_statement,variable,indirect,INR,cost_accounting
-5040,Fixed overhead,income_statement,fixed,indirect,INR,cost_accounting
-6010,Selling and distribution,income_statement,variable,indirect,INR,commercial
+account_id,name,statement,behavior,directness,unit,owner,cost_center,controllability
+4010,Revenue,income_statement,revenue,direct,INR,finance,CC-SALES,uncontrollable
+5010,Direct materials,income_statement,variable,direct,INR,cost_accounting,CC-PLANT,controllable
+5020,Direct labour,income_statement,variable,direct,INR,cost_accounting,CC-PLANT,controllable
+5030,Variable overhead,income_statement,variable,indirect,INR,cost_accounting,CC-PLANT,controllable
+5040,Fixed overhead,income_statement,fixed,indirect,INR,cost_accounting,CC-PLANT,uncontrollable
+6010,Selling and distribution,income_statement,variable,indirect,INR,commercial,CC-SALES,controllable

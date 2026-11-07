@@ -1,4 +1,4 @@
-.PHONY: install test lint demo serve check clean
+.PHONY: install test lint demo serve check verify clean
 
 PYTHON := /Users/adarshahebbar/Documents/CostPilot/.venv/bin/python
 PROJECT := /Users/adarshahebbar/Documents/CostPilot
@@ -18,8 +18,11 @@ demo:
 check:
 	$(PYTHON) -m costpilot.cli check
 
+verify:
+	$(PYTHON) -m costpilot.cli verify
+
 serve:
 	$(PYTHON) -m costpilot.cli serve --port 8000
 
 clean:
-	rm -rf $(PROJECT)/.pytest_cache $(PROJECT)/.ruff_cache $(PROJECT)/data/audit.db
+	rm -rf $(PROJECT)/.pytest_cache $(PROJECT)/.ruff_cache $(PROJECT)/data

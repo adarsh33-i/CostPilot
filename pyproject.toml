@@ -4,14 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "costpilot"
-version = "0.3.0"
-description = "Deterministic management-accounting engine and working M0-M3 demo"
+version = "1.0.0"
+description = "Deterministic management-accounting copilot with a sealed audit chain"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
   "fastapi>=0.115",
   "uvicorn>=0.30",
+  "openpyxl>=3.1",
+  "reportlab>=4.0",
+  "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
