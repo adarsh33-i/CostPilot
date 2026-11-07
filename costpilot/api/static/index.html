@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CostPilot — M0–M3 working demo</title>
+<style>
+:root{
+  --paper:#f2eee5; --paper-2:#e9e3d7; --card:#fffdf8; --ink:#17242c; --ink-2:#45555f;
+  --muted:#75838b; --line:#d5ccbc; --line-2:#e7e0d3; --teal:#0f5c5c; --teal-2:#e3efec;
+  --amber:#a96b1f; --amber-bg:#f8ecd8; --red:#9d3730; --red-bg:#f7e3df;
+  --green:#2f6b4f; --green-bg:#e4efe7; --blue:#315b7d; --blue-bg:#e5edf5;
+  --mono:"SF Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+  --serif:"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans:"Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;
+  background-image:linear-gradient(rgba(23,36,44,.025) 1px, transparent 1px);background-size:100% 28px}
+button,input,select{font:inherit;color:inherit}
+a{color:var(--teal);text-underline-offset:3px}
+.wrap{width:min(1320px, calc(100% - 48px));margin:0 auto}
+.site-header{border-bottom:1px solid var(--line);background:rgba(242,238,229,.92);backdrop-filter:blur(8px);position:sticky;top:0;z-index:20}
+.header-grid{display:flex;align-items:center;gap:28px;padding:14px 0 10px}
+.brand{display:flex;align-items:center;gap:12px;min-width:220px}
+.mark{width:38px;height:38px;flex:0 0 auto}
+.brand-name{font-family:var(--serif);font-size:25px;line-height:1;letter-spacing:-.02em}
+.brand-sub{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.dataset{flex:1;min-width:0}
+.dataset .name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dataset .meta{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+.quality{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--card);
+  border-radius:999px;padding:3px 9px;font-size:11px;white-space:nowrap}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:var(--muted)}
+.chip.ok .dot{background:var(--green)} .chip.warn .dot{background:var(--amber)} .chip.bad .dot{background:var(--red)}
+.nav-row{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-bottom:0}
+.tabs{display:flex;gap:2px}
+.tab{appearance:none;border:0;background:transparent;padding:11px 16px 12px;border-bottom:2px solid transparent;
+  color:var(--ink-2);cursor:pointer;font-size:13.5px;font-weight:550}
+.tab:hover{color:var(--teal)}
+.tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+.milestone{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding-bottom:13px}
+main{padding:30px 0 60px;min-height:70vh}
+.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin:4px 0 22px}
+h1{font-family:var(--serif);font-weight:500;font-size:clamp(28px,3.4vw,42px);line-height:1.08;letter-spacing:-.025em;margin:0 0 8px}
+.page-head p{margin:0;color:var(--ink-2);max-width:760px}
+.canonical{font-size:11px;color:var(--muted);text-align:right;line-height:1.5;max-width:270px}
+.canonical strong{color:var(--ink-2);font-weight:600}
+.layout{display:grid;grid-template-columns:360px minmax(0,1fr);gap:24px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(23,36,44,.04)}
+.form-card{padding:20px;position:sticky;top:118px}
+.form-card h2,.section-title{font-family:var(--serif);font-weight:500;font-size:21px;margin:0 0 4px}
+.form-note{font-size:12px;color:var(--muted);margin:0 0 16px}
+.field{margin:0 0 13px}
+.field label{display:block;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2);margin-bottom:5px;font-weight:600}
+.field input,.field select{width:100%;background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px 10px;
+  font-family:var(--mono);font-size:13px;outline:none}
+.field input:focus,.field select:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(15,92,92,.1)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--ink-2);margin:4px 0 14px}
+.check input{margin-top:3px;accent-color:var(--teal)}
+.btn{appearance:none;border:1px solid var(--teal);background:var(--teal);color:#fff;border-radius:6px;
+  padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;width:100%}
+.btn:hover{background:#0c4b4b}
+.btn.secondary{background:transparent;color:var(--teal)}
+.btn.secondary:hover{background:var(--teal-2)}
+.btn.small{width:auto;padding:6px 10px;font-size:12px}
+.btn:disabled{opacity:.55;cursor:wait}
+.form-actions{margin-top:16px}
+.resolved{margin-top:16px;border-top:1px dashed var(--line);padding-top:13px;font-size:12px;color:var(--muted)}
+.resolved dl{display:grid;grid-template-columns:1fr auto;gap:5px 10px;margin:8px 0 0}
+.resolved dt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.resolved dd{margin:0;font-family:var(--mono);color:var(--ink-2);text-align:right}
+.result-column{min-width:0;display:flex;flex-direction:column;gap:18px}
+.result-card{padding:24px 26px;border-left:4px solid var(--line);position:relative;overflow:hidden}
+.verdict-row{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.verdict-label{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.verdict{font-family:var(--serif);font-size:30px;line-height:1.1;margin:0;font-weight:500;letter-spacing:-.02em}
+.verdict.accept{color:var(--green)} .verdict.reject{color:var(--red)} .verdict.investigate{color:var(--amber)}
+.big-number{text-align:right}
+.big-number .num{font-family:var(--mono);font-size:30px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.big-number .lab{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:3px}
+.rule{height:1px;background:var(--line-2);margin:18px 0}
+.fact-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line-2);border:1px solid var(--line-2);border-radius:8px;overflow:hidden}
+.fact{background:var(--card);padding:12px 14px;min-width:0}
+.fact .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fact .val{font-family:var(--mono);font-size:17px;margin-top:3px;letter-spacing:-.02em}
+.fact .sub{font-size:10.5px;color:var(--muted);margin-top:1px}
+.rationale{font-family:var(--serif);font-size:17px;line-height:1.5;margin:16px 0 0;color:var(--ink)}
+h3.block-title{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;font-weight:700}
+table{width:100%;border-collapse:collapse}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;
+  padding:7px 8px;border-bottom:1px solid var(--line);font-weight:600;white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line-2);vertical-align:top;font-size:13px}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.total td{border-top:1px solid var(--line);font-weight:650;background:#fbf8f1}
+tr.total td:first-child{font-weight:650}
+.mono{font-family:var(--mono)}
+.neg{color:var(--red)} .pos{color:var(--green)}
+.small{font-size:11.5px;color:var(--muted)}
+.src{display:inline-block;font-family:var(--mono);font-size:10px;background:var(--paper-2);border-radius:4px;padding:1px 5px;color:var(--ink-2);margin:1px 3px 1px 0}
+.assumption-list,.condition-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+.assumption-list li,.condition-list li{display:flex;gap:9px;align-items:flex-start;font-size:13px}
+.assumption-list li::before{content:"";width:7px;height:7px;border:1px solid var(--teal);border-radius:50%;margin-top:6px;flex:0 0 auto}
+.condition-list li::before{content:"";width:5px;height:5px;background:var(--amber);border-radius:50%;margin-top:7px;flex:0 0 auto}
+.warning{border:1px solid #e8d3ae;background:var(--amber-bg);border-radius:7px;padding:9px 11px;font-size:12.5px;margin:7px 0}
+.warning.info{border-color:#cad9e6;background:var(--blue-bg)}
+.warning .w-title{font-weight:650;margin-right:4px}
+.empty{border:1px dashed var(--line);border-radius:10px;padding:42px 28px;text-align:center;color:var(--muted);background:rgba(255,253,248,.55)}
+.empty h2{font-family:var(--serif);font-weight:500;color:var(--ink-2);margin:0 0 6px;font-size:24px}
+.empty p{margin:0 auto;max-width:520px;font-size:13.5px}
+.confirm-panel{padding:22px 24px;border-left:4px solid var(--teal)}
+.confirm-panel h2{font-family:var(--serif);font-weight:500;font-size:24px;margin:0 0 4px}
+.confirm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line-2);
+  border:1px solid var(--line-2);border-radius:8px;overflow:hidden;margin:14px 0}
+.confirm-item{background:var(--card);padding:10px 12px}
+.confirm-item .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.confirm-item .v{font-family:var(--mono);font-size:14px;margin:2px 0}
+.confirm-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.confirm-actions .btn{width:auto}
+.error-card{padding:20px 22px;border-left:4px solid var(--red);background:var(--red-bg)}
+.error-card h2{font-family:var(--serif);font-weight:500;margin:0 0 4px;color:var(--red);font-size:23px}
+.error-card p{margin:0 0 8px}
+details.audit{border-top:1px solid var(--line);margin-top:22px}
+details.audit summary{cursor:pointer;padding:12px 0 2px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--teal);font-weight:650}
+.audit-body{padding:8px 0 2px}
+.audit-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:8px 0 14px}
+.audit-meta div{font-size:11px;color:var(--muted)}
+.audit-meta .v{font-family:var(--mono);color:var(--ink-2);font-size:11.5px;overflow-wrap:anywhere;margin-top:2px}
+.hash{font-family:var(--mono);font-size:10.5px;overflow-wrap:anywhere;color:var(--ink-2)}
+.val-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.val-chip{font-size:10.5px;border:1px solid var(--line);border-radius:999px;padding:2px 8px;background:#fff}
+.val-chip.pass{border-color:#bcd6c5;color:var(--green)} .val-chip.fail{border-color:#e3b9b2;color:var(--red)}
+.reperform-status{margin-top:12px;font-size:12.5px;padding:9px 11px;border-radius:7px;background:var(--teal-2);border:1px solid #bcd6d0}
+.reperform-status.bad{background:var(--red-bg);border-color:#e3b9b2}
+.reperform-status.warn{background:var(--amber-bg);border-color:#e8d3ae}
+.section-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:16px;flex-wrap:wrap}
+.section-head h2{font-family:var(--serif);font-weight:500;font-size:28px;margin:0}
+.section-head p{margin:3px 0 0;color:var(--muted);font-size:13px}
+.pack-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.pack-grid .card{padding:20px}
+.pack-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px}
+.pack-card-head h3{font-family:var(--serif);font-weight:500;font-size:20px;margin:0}
+.pack-value{font-family:var(--mono);font-size:19px;text-align:right}
+.fa{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;padding:1px 6px;border-radius:4px;vertical-align:2px;margin-left:5px}
+.fa.f{background:var(--green-bg);color:var(--green)} .fa.a{background:var(--red-bg);color:var(--red)}
+.fa.n{background:var(--paper-2);color:var(--ink-2)}
+.summary-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:13px 14px}
+.tile .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .val{font-family:var(--mono);font-size:19px;margin-top:4px}
+.tile .sub{font-size:10.5px;color:var(--muted);margin-top:2px}
+.table-wrap{overflow-x:auto}
+.rule-module{margin-bottom:26px}
+.rule-module h3{font-family:var(--serif);font-weight:500;font-size:19px;margin:0 0 8px}
+.rule-table td{font-size:12px}
+.rule-table .id{font-family:var(--mono);font-size:11px;white-space:nowrap;color:var(--teal)}
+.gate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.gate{border:1px solid var(--line);border-radius:7px;padding:10px 12px;background:var(--card)}
+.gate .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.gate .id{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.gate .name{font-weight:600;font-size:12.5px;margin-top:2px}
+.gate .detail{font-size:11.5px;color:var(--muted);margin-top:3px}
+.status{font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;padding:2px 7px;border-radius:999px}
+.status.pass{background:var(--green-bg);color:var(--green)} .status.warn{background:var(--amber-bg);color:var(--amber)} .status.block{background:var(--red-bg);color:var(--red)}
+.hidden{display:none !important}
+.foot{border-top:1px solid var(--line);padding:18px 0 34px;font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.foot a{color:var(--ink-2)}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:1080px){
+  .layout{grid-template-columns:320px minmax(0,1fr)}
+  .fact-strip,.summary-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:860px){
+  .layout,.pack-grid,.gate-grid{grid-template-columns:1fr}
+  .form-card{position:static}
+  .header-grid{flex-wrap:wrap;gap:10px}
+  .dataset{order:3;flex-basis:100%}
+  .page-head{flex-direction:column;align-items:flex-start}
+  .canonical{text-align:left}
+  .fact-strip,.summary-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .confirm-grid{grid-template-columns:1fr}
+  .audit-meta{grid-template-columns:1fr 1fr}
+}
+@media (max-width:520px){
+  .wrap{width:calc(100% - 28px)}
+  .fact-strip,.summary-tiles,.field-row{grid-template-columns:1fr}
+  .tabs{overflow-x:auto}
+  .tab{white-space:nowrap;padding:10px 10px 11px}
+  .milestone{display:none}
+}
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap header-grid">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="1" y="1" width="38" height="38" rx="9" fill="#0f5c5c"/>
+        <path d="M11 27.5V14h3.4l5.9 8.3V14h3.3v13.5h-3.3l-6-8.4v8.4z" fill="#f2eee5"/>
+        <circle cx="29.5" cy="24.5" r="2.2" fill="#d9b36c"/>
+      </svg>
+      <div>
+        <div class="brand-name">CostPilot</div>
+        <div class="brand-sub">Management accounting, traceable</div>
+      </div>
+    </div>
+    <div class="dataset">
+      <div class="name" id="dataset-name">Loading dataset…</div>
+      <div class="meta" id="dataset-meta">snapshot · —</div>
+    </div>
+    <div class="quality" id="quality-chips" aria-live="polite"></div>
+  </div>
+  <div class="wrap nav-row">
+    <nav class="tabs" role="tablist" aria-label="Workspace">
+      <button class="tab active" data-tab="special" role="tab" aria-selected="true">Special order</button>
+      <button class="tab" data-tab="variance" role="tab" aria-selected="false">Variance pack</button>
+      <button class="tab" data-tab="rules" role="tab" aria-selected="false">Rulebook &amp; data quality</button>
+    </nav>
+    <div class="milestone">M0–M3 · deterministic engine</div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="panel-special" class="panel">
+    <div class="page-head">
+      <div>
+        <h1>Should we accept the order?</h1>
+        <p>A special-order decision on the synthetic Northline manufacturer. The engine resolves standard costs, computes the differential, checks capacity, and seals an audit trace. The model is not in the calculation path.</p>
+      </div>
+      <div class="canonical"><strong>Canonical case</strong><br>2,000 units at ₹380 with idle capacity, ₹40,000 incremental setup, no displaced sales.</div>
+    </div>
+    <div class="layout">
+      <aside class="card form-card">
+        <h2>Decision inputs</h2>
+        <p class="form-note">Product, plant, and period resolve the standard cost card. Confirm what the system believes before it calculates.</p>
+        <form id="so-form" autocomplete="off">
+          <div class="field">
+            <label for="so-product">Product</label>
+            <select id="so-product"></select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="so-plant">Plant</label>
+              <select id="so-plant"></select>
+            </div>
+            <div class="field">
+              <label for="so-period">Period</label>
+              <select id="so-period"></select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="so-units">Order units</label>
+              <input id="so-units" inputmode="decimal" value="2000">
+            </div>
+            <div class="field">
+              <label for="so-price">Order price / unit (₹)</label>
+              <input id="so-price" inputmode="decimal" value="380.00">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="so-fixed">Incremental fixed (₹)</label>
+              <input id="so-fixed" inputmode="decimal" value="40000.00">
+            </div>
+            <div class="field">
+              <label for="so-capacity">Capacity state</label>
+              <select id="so-capacity">
+                <option value="idle">Idle capacity</option>
+                <option value="constrained">Constrained</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" id="idle-field">
+            <label for="so-idle">Confirmed idle units</label>
+            <input id="so-idle" inputmode="decimal" value="">
+          </div>
+          <label class="check"><input type="checkbox" id="so-selling" checked> Variable selling cost is avoided on this order</label>
+          <div class="form-actions">
+            <button class="btn" type="button" id="preview-btn">Review parameters</button>
+          </div>
+        </form>
+        <div class="resolved" id="resolved-strip">
+          <div class="small">Dataset readiness and rule versions load with the capability card.</div>
+        </div>
+      </aside>
+      <section class="result-column" aria-live="polite">
+        <div id="confirm-panel" class="card confirm-panel hidden"></div>
+        <div id="so-result">
+          <div class="empty">
+            <h2>Review the parameters</h2>
+            <p>The engine has not run yet. Choose the product and order terms, then review the resolved standard costs and capacity assumptions.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section id="panel-variance" class="panel hidden">
+    <div class="page-head">
+      <div>
+        <h1>Variance and flux pack</h1>
+        <p>Standard-cost decomposition, flexible budget, account flux, and the absorption bridge for one product-plant-period. Every line cites a rule and a source; unavailable decomposition is labelled, not estimated.</p>
+      </div>
+      <div class="canonical"><strong>M2 working paper</strong><br>The close pack is generated from the same snapshot the decision engine uses.</div>
+    </div>
+    <div class="card" style="padding:18px 20px;margin-bottom:18px">
+      <form id="v-form" class="field-row" style="align-items:end;margin:0">
+        <div class="field" style="margin:0"><label for="v-product">Product</label><select id="v-product"></select></div>
+        <div class="field" style="margin:0"><label for="v-plant">Plant</label><select id="v-plant"></select></div>
+        <div class="field" style="margin:0"><label for="v-period">Period</label><select id="v-period"></select></div>
+        <div class="field" style="margin:0"><button class="btn" type="button" id="variance-btn">Run variance pack</button></div>
+      </form>
+    </div>
+    <div id="variance-result">
+      <div class="empty"><h2>Run the pack</h2><p>Select a product, plant, and period. The pack includes material, labour, overhead, flexible-budget, flux, and bridge components.</p></div>
+    </div>
+  </section>
+
+  <section id="panel-rules" class="panel hidden">
+    <div class="page-head">
+      <div>
+        <h1>Rulebook and data quality</h1>
+        <p>The frozen M0 catalogue and the ingestion gates that decide whether a snapshot is trusted. Rule versions are pinned into every run.</p>
+      </div>
+      <div class="canonical"><strong>Trust surface</strong><br>No rule, gate, or number is written by a language model.</div>
+    </div>
+    <div class="card" style="padding:22px 24px;margin-bottom:22px">
+      <h2 class="section-title">Ingestion gates</h2>
+      <p class="form-note">Blocking gates prevent analysis; warnings remain visible in the capability card.</p>
+      <div id="gates" class="gate-grid"></div>
+    </div>
+    <div class="card" style="padding:22px 24px">
+      <h2 class="section-title">Registered rules</h2>
+      <p class="form-note" id="rulebook-meta">Loading…</p>
+      <div id="rules"></div>
+    </div>
+  </section>
+</main>
+
+<div class="wrap foot">
+  <span>CostPilot M0–M3 working demo · synthetic Northline fixture · no LLM arithmetic</span>
+  <span><a href="/docs">API docs</a> · <a href="/api/capability">capability JSON</a> · <a href="/api/audit/verify">verify audit chain</a></span>
+</div>
+
+<script>
+"use strict";
+
+const state = {
+  capability:null, health:null, rules:null, preview:null, formArgs:null,
+  lastResult:null, lastVariance:null, tabsLoaded:{special:true,variance:false,rules:false}
+};
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined&&text!==null)n.textContent=text; return n; };
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+
+function scrollToNode(node, behavior="smooth"){
+  if(!node) return;
+  const header=document.querySelector(".site-header");
+  const offset=(header?header.getBoundingClientRect().height:0)+12;
+  window.scrollTo({top:Math.max(0, node.getBoundingClientRect().top + window.scrollY - offset), behavior});
+}
+
+function fmtValue(value, unit){
+  const v = String(value ?? "");
+  if (unit === "INR") return "₹" + v;
+  if (unit === "INR/unit") return "₹" + v + "/unit";
+  if (unit === "INR/hour") return "₹" + v + "/hour";
+  if (unit === "INR/kg") return "₹" + v + "/kg";
+  if (unit === "INR/scarce-unit") return "₹" + v + "/unit";
+  if (unit === "units") return v + " units";
+  if (unit === "hours") return v + " hrs";
+  if (unit === "kg") return v + " kg";
+  if (unit === "ratio") return v + "×";
+  if (unit === "%") return v;
+  return v + (unit ? " " + unit : "");
+}
+function numClass(value){
+  const s=String(value ?? "");
+  return s.startsWith("-") || s.startsWith("(") ? "neg" : "";
+}
+function chip(label, cls=""){ return `<span class="chip ${cls}"><span class="dot"></span>${esc(label)}</span>`; }
+function statusChip(status){
+  const cls = status==="pass"?"ok":status==="warn"?"warn":"bad";
+  return chip(status, cls);
+}
+function favBadge(fav){
+  if (fav === true) return '<span class="fa f">F</span>';
+  if (fav === false) return '<span class="fa a">A</span>';
+  return '<span class="fa n">—</span>';
+}
+function verdictClass(verdict){
+  const v=String(verdict||"").toLowerCase();
+  if(v.includes("accept")) return "accept";
+  if(v.includes("reject")) return "reject";
+  return "investigate";
+}
+function fact(result, id){
+  return (result.facts||[]).find(f=>f.fact_id===id) || null;
+}
+function sourceChips(refs){
+  return (refs||[]).map(r=>`<span class="src">${esc(r)}</span>`).join("");
+}
+
+async function api(path, options={}){
+  const opts = {headers:{}, ...options};
+  if (opts.body && typeof opts.body !== "string") { opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(opts.body); }
+  const res = await fetch(path, opts);
+  let payload = null;
+  try { payload = await res.json(); } catch (e) { payload = null; }
+  if (!res.ok) {
+    const err = payload && payload.error ? payload : {error:{code:"HTTP_"+res.status,message:"Request failed"}};
+    err.remediation = (payload && payload.remediation) || [];
+    throw err;
+  }
+  return payload;
+}
+
+function errorCard(err){
+  const code = err.error ? err.error.code : "ERROR";
+  const msg = err.error ? err.error.message : String(err);
+  const rem = (err.remediation||[]).map(r=>`<li>${esc(r)}</li>`).join("");
+  return `<div class="card error-card"><h2>That request stopped</h2><p><strong>${esc(code)}</strong> — ${esc(msg)}</p>${rem?`<p class="small">Next step:</p><ul class="condition-list">${rem}</ul>`:'<p class="small">Retry after correcting the input.</p>'}</div>`;
+}
+
+function setLoading(button, label, busy=true){
+  if(!button) return;
+  if(busy){ button.dataset.label = button.textContent; button.disabled=true; button.innerHTML='<span class="spinner"></span>'+esc(label); }
+  else { button.disabled=false; button.textContent=button.dataset.label || label; }
+}
+
+function fillSelect(id, items, valueKey, labelKey){
+  const sel=$(id); if(!sel) return;
+  sel.innerHTML="";
+  for(const item of items||[]){
+    const opt=document.createElement("option");
+    opt.value=item[valueKey];
+    opt.textContent=item[labelKey] ? `${item[valueKey]} — ${item[labelKey]}` : item[valueKey];
+    sel.appendChild(opt);
+  }
+}
+
+function syncDemoDefaults(){
+  const d = state.capability && state.capability.demo_defaults;
+  if(!d) return;
+  ["so-product","v-product"].forEach(id=>{ const n=$(id); if(n) n.value=d.product_id; });
+  ["so-plant","v-plant"].forEach(id=>{ const n=$(id); if(n) n.value=d.plant_id; });
+  ["so-period","v-period"].forEach(id=>{ const n=$(id); if(n) n.value=d.period_id; });
+}
+
+function markStale(){
+  state.preview=null;
+  $("confirm-panel").classList.add("hidden");
+  const strip=$("resolved-strip");
+  if(strip) strip.innerHTML = '<div class="small">Inputs changed. Review the resolved parameters again before calculating.</div>';
+}
+
+async function loadCapability(){
+  try{
+    const [cap, health] = await Promise.all([api("/api/capability"), api("/api/health")]);
+    state.capability=cap; state.health=health;
+    $("dataset-name").textContent = cap.dataset;
+    $("dataset-meta").textContent = `${cap.snapshot_id} · ${cap.periods.length} periods · ${cap.currency}`;
+    const dq=cap.data_quality||{};
+    const chain=health.audit_chain||{};
+    $("quality-chips").innerHTML = [
+      chip(`${(Number(dq.tag_coverage_weighted)*100).toFixed(2)}% tagged`, dq.tag_coverage_weighted>=0.99?"ok":"warn"),
+      chip(dq.reconciled?"control totals tie":"reconciliation open", dq.reconciled?"ok":"bad"),
+      chip(`${dq.blocking_gates} blocking gates`, dq.blocking_gates===0?"ok":"bad"),
+      chip(chain.ok?"audit chain sealed":"audit chain open", chain.ok?"ok":"warn")
+    ].join("");
+    fillSelect("so-product", cap.products, "product_id", "name");
+    fillSelect("so-plant", cap.plants, "plant_id", "name");
+    fillSelect("so-period", cap.periods.map(p=>({period_id:p})), "period_id", null);
+    fillSelect("v-product", cap.products, "product_id", "name");
+    fillSelect("v-plant", cap.plants, "plant_id", "name");
+    fillSelect("v-period", cap.periods.map(p=>({period_id:p})), "period_id", null);
+    syncDemoDefaults();
+    $("resolved-strip").innerHTML = `<div class="small">Snapshot ${esc(cap.snapshot_id)} · ${cap.supported_decisions.length} registered decisions · rulebook ${esc(cap.milestones)}</div>`;
+    renderGates(cap.data_quality.gates||[]);
+    previewSpecial(false);
+  }catch(err){
+    $("so-result").innerHTML = errorCard(err);
+    $("dataset-name").textContent = "Dataset unavailable";
+  }
+}
+
+function specialArgs(){
+  const args={
+    product_id:$("so-product").value, plant_id:$("so-plant").value, period_id:$("so-period").value,
+    order_units:$("so-units").value, order_price:$("so-price").value,
+    incremental_fixed_cost:$("so-fixed").value, capacity_state:$("so-capacity").value,
+    variable_selling_cost_avoided:$("so-selling").checked
+  };
+  if($("so-capacity").value==="idle" && $("so-idle").value!=="" && $("so-idle").dataset.auto!=="1") args.idle_capacity_units=$("so-idle").value;
+  return args;
+}
+
+async function previewSpecial(scroll=true){
+  const btn=$("preview-btn");
+  state.formArgs=specialArgs();
+  setLoading(btn,"Resolving…",true);
+  try{
+    const preview=await api("/api/tools/preview_differential_analysis",{method:"POST",body:{decision_type:"special_order",arguments:state.formArgs}});
+    state.preview=preview;
+    const idle=(preview.confirmation_sheet||[]).find(item=>item.key==="idle_capacity_units");
+    if(idle && idle.source==="snapshot" && !$("so-idle").value){ $("so-idle").value=idle.value; $("so-idle").dataset.auto="1"; }
+    renderConfirm(preview, scroll);
+    $("so-result").innerHTML = `<div class="empty"><h2>Parameters resolved</h2><p>The confirmation sheet is above. Nothing has been calculated yet; confirm to run the differential.</p></div>`;
+  }catch(err){
+    $("confirm-panel").classList.add("hidden");
+    $("so-result").innerHTML=errorCard(err);
+  }finally{ setLoading(btn,"Resolving…",false); }
+}
+
+function renderConfirm(preview, scroll=true){
+  const panel=$("confirm-panel");
+  const sheet=preview.confirmation_sheet||[];
+  const items=sheet.map(item=>`<div class="confirm-item"><div class="k">${esc(item.label)}</div><div class="v">${esc(item.value)}</div><span class="src">${esc(item.source)}</span></div>`).join("");
+  panel.innerHTML=`
+    <h2>Confirm what the system believes</h2>
+    <p class="small">${esc(preview.message)}</p>
+    <div class="confirm-grid">${items}</div>
+    <p class="small">Assumptions that came from the registry or a policy default are shown with their source. Changing an input means confirming again.</p>
+    <div class="confirm-actions">
+      <button class="btn" type="button" id="confirm-run">Confirm &amp; calculate</button>
+      <button class="btn secondary" type="button" id="edit-inputs">Back to inputs</button>
+    </div>`;
+  panel.classList.remove("hidden");
+  $("confirm-run").addEventListener("click", runSpecial);
+  $("edit-inputs").addEventListener("click", ()=>{ panel.classList.add("hidden"); scrollToNode($("so-result"),"nearest"); });
+  if(scroll) scrollToNode(panel);
+}
+
+async function runSpecial(){
+  const btn=$("confirm-run");
+  setLoading(btn,"Calculating…",true);
+  try{
+    const payload=await api("/api/tools/run_differential_analysis",{method:"POST",body:{
+      decision_type:"special_order", arguments:state.formArgs, confirmation:{confirmed:true}, question:"Should we accept the special order?"
+    }});
+    state.lastResult=payload;
+    $("confirm-panel").classList.add("hidden");
+    $("so-result").innerHTML=renderSpecial(payload);
+    bindResultActions(payload);
+    scrollToNode($("so-result"));
+  }catch(err){
+    $("so-result").innerHTML=errorCard(err);
+  }finally{ setLoading(btn,"Calculating…",false); }
+}
+
+function renderSpecial(payload){
+  const r=payload.result; const v=verdictClass(r.verdict);
+  const fProfit=fact(r,"f_profit"), fContribution=fact(r,"f_contribution"), fFloor=fact(r,"f_floor"), fOpportunity=fact(r,"f_opportunity");
+  const steps=(r.steps||[]).filter(s=>s.step_id!=="s7");
+  const assumptions=(r.assumptions||[]).map(a=>`<li>${esc(a.text)} <span class="src">${esc(a.source)}</span>${a.confirmed?'<span class="src">confirmed</span>':'<span class="src">unconfirmed</span>'}</li>`).join("");
+  const warnings=(r.warnings||[]).map(w=>`<div class="warning ${w.severity==="info"?"info":""}"><span class="w-title">${esc(w.code)}</span>${esc(w.message)}${w.remediation?` <span class="small">${esc(w.remediation)}</span>`:""}</div>`).join("");
+  const conditions=(r.conditions||[]).map(c=>`<li>${esc(c)}</li>`).join("");
+  const sensitivity=(r.sensitivity||[]).map(s=>`<tr><td>${esc(s.label)}</td><td class="num ${numClass(s.value)}">${esc(fmtValue(s.display,s.unit))}${favBadge(s.favorable)}</td><td class="small">${esc(s.note||"")}</td></tr>`).join("");
+  const resolved=r.meta.resolved_inputs||{};
+  const stepRows=steps.map(s=>`<tr><td class="mono small">${esc(s.step_id)}</td><td><strong>${esc(s.label)}</strong><div class="small">${esc(s.formula)}</div></td><td class="num ${numClass(s.value)}">${esc(fmtValue(s.display,s.unit))}</td><td class="small">${esc(s.rule_id)} v${esc(s.rule_version)}</td></tr>`).join("");
+  const validation=payload.validation||{};
+  const valChips=Object.entries(validation).filter(([k])=>k!=="failures").map(([k,val])=>`<span class="val-chip ${val==="pass"?"pass":"fail"}">${esc(k)}: ${esc(val)}</span>`).join("");
+  return `
+  <article class="card result-card" style="border-left-color:var(--${v==="accept"?"green":v==="reject"?"red":"amber"})">
+    <div class="verdict-row">
+      <div>
+        <div class="verdict-label">Engine verdict</div>
+        <h2 class="verdict ${v}">${esc(r.verdict)}</h2>
+        <div class="small">${esc(r.meta.product_id)} · ${esc(r.meta.plant_id)} · ${esc(r.meta.period_id)} · ${esc(resolved.order_units||"")} units at ₹${esc(resolved.order_price||"")}</div>
+      </div>
+      <div class="big-number">
+        <div class="num ${numClass(r.value)}">${esc(fmtValue(r.display,r.unit))}</div>
+        <div class="lab">Incremental profit</div>
+      </div>
+    </div>
+    <div class="rule"></div>
+    <div class="fact-strip">
+      <div class="fact"><div class="lab">Incremental contribution</div><div class="val ${numClass(fContribution?fContribution.value:"")}">${esc(fContribution?fmtValue(fContribution.display,fContribution.unit):"—")}</div><div class="sub">${esc(fContribution?fContribution.step_id:"")}</div></div>
+      <div class="fact"><div class="lab">Opportunity cost</div><div class="val ${numClass(fOpportunity?fOpportunity.value:"")}">${esc(fOpportunity?fmtValue(fOpportunity.display,fOpportunity.unit):"—")}</div><div class="sub">${esc(resolved.displaced_units||"0")} displaced units</div></div>
+      <div class="fact"><div class="lab">Minimum price</div><div class="val">${esc(fFloor?fmtValue(fFloor.display,fFloor.unit):"—")}</div><div class="sub">floor per unit</div></div>
+      <div class="fact"><div class="lab">Capacity</div><div class="val">${esc(resolved.capacity_state||"—")}</div><div class="sub">${esc(resolved.idle_capacity_units||"not quantified")} idle units</div></div>
+    </div>
+    <p class="rationale">${esc(r.rationale)}</p>
+    <h3 class="block-title">Differential table</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Step</th><th>Line</th><th class="num">Amount</th><th>Rule</th></tr></thead>
+      <tbody>${stepRows}</tbody>
+      <tfoot><tr class="total"><td></td><td>Minimum acceptable price ${favBadge(null)}</td><td class="num">${esc(fFloor?fmtValue(fFloor.display,fFloor.unit):"—")}</td><td class="small">${esc(fFloor?fFloor.step_id:"")}</td></tr></tfoot>
+    </table></div>
+    <h3 class="block-title">Conditions attached to the verdict</h3>
+    <ul class="condition-list">${conditions}</ul>
+    <h3 class="block-title">Capacity sensitivity</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Scenario</th><th class="num">Incremental profit</th><th>Minimum price</th></tr></thead>
+      <tbody>${sensitivity}</tbody>
+    </table></div>
+    ${warnings?`<h3 class="block-title">Warnings</h3>${warnings}`:""}
+    <h3 class="block-title">Assumptions</h3>
+    <ul class="assumption-list">${assumptions}</ul>
+    <details class="audit" id="audit-drawer">
+      <summary>Audit trail · ${esc(payload.trace_ref.run_id||"unsealed")}</summary>
+      <div class="audit-body">
+        <div class="audit-meta">
+          <div>Run id<div class="v">${esc(payload.trace_ref.run_id||"—")}</div></div>
+          <div>Event hash<div class="v">${esc(payload.trace_ref.event_hash||"—")}</div></div>
+          <div>Snapshot<div class="v">${esc(payload.snapshot_id)}</div></div>
+          <div>Engine<div class="v">${esc(payload.pins.engine_version)} · registry ${esc(payload.pins.registry_version)}</div></div>
+          <div>Rulebook<div class="v">${esc(payload.pins.rulebook_version)}</div></div>
+          <div>Input hash<div class="v">${esc(payload.validation && payload.validation.failures ? "validation has failures" : "sealed in payload")}</div></div>
+        </div>
+        <div class="val-chips">${valChips}</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Step</th><th>Formula and inputs</th><th class="num">Value</th><th>Sources</th></tr></thead>
+          <tbody>${(r.steps||[]).map(s=>`<tr><td class="mono small">${esc(s.step_id)}</td><td><strong>${esc(s.label)}</strong><div class="small">${esc(s.formula)}</div><div class="small mono">${esc(Object.entries(s.inputs||{}).map(([k,val])=>k+"="+val).join(" · "))}</div>${s.note?`<div class="small">${esc(s.note)}</div>`:""}</td><td class="num ${numClass(s.value)}">${esc(fmtValue(s.display,s.unit))}</td><td>${sourceChips(s.source_refs)}</td></tr>`).join("")}</tbody>
+        </table></div>
+        <div id="reperform-slot"></div>
+        <div class="confirm-actions">
+          <button class="btn secondary small" type="button" data-reperform="${esc(payload.trace_ref.run_id||"")}">Re-perform this run</button>
+          <button class="btn secondary small" type="button" data-export>Export run JSON</button>
+          <a class="small" href="/api/runs/${encodeURIComponent(payload.trace_ref.run_id||"")}" target="_blank" rel="noopener">Open raw run JSON</a>
+        </div>
+      </div>
+    </details>
+  </article>`;
+}
+
+function bindResultActions(payload){
+  const btn=document.querySelector("[data-reperform]");
+  if(btn) btn.addEventListener("click", ()=>reperformRun(btn, payload.trace_ref.run_id, "reperform-slot"));
+  const exp=document.querySelector("[data-export]");
+  if(exp) exp.addEventListener("click", ()=>downloadJson(`costpilot-${payload.trace_ref.run_id||"run"}.json`, payload));
+}
+
+function downloadJson(filename, payload){
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+async function reperformRun(button, runId, slotId){
+  if(!runId) return;
+  const slot=$(slotId); if(!slot) return;
+  setLoading(button,"Re-performing…",true);
+  try{
+    const result=await api(`/api/runs/${encodeURIComponent(runId)}/reperform`,{method:"POST"});
+    const cls=result.status==="exact"?"":result.status==="mismatch"?" bad":" warn";
+    const comps=result.components ? Object.entries(result.components).map(([name,c])=>`${esc(name)}: ${esc(c.status)}`).join(" · ") : "";
+    slot.innerHTML=`<div class="reperform-status${cls}"><strong>${esc(result.status)}</strong> — stored values compared with a fresh execution of the pinned rules.${comps?` <span class="small">${comps}</span>`:""}</div>`;
+  }catch(err){
+    slot.innerHTML=`<div class="reperform-status bad">${esc(err.error?err.error.message:"Re-performance failed")}</div>`;
+  }finally{ setLoading(button,"Re-performing…",false); }
+}
+
+/* ---------- variance ---------- */
+
+async function runVariance(){
+  const btn=$("variance-btn");
+  setLoading(btn,"Building pack…",true);
+  try{
+    const payload=await api("/api/tools/run_variance_analysis",{method:"POST",body:{
+      product_id:$("v-product").value, plant_id:$("v-plant").value, period_id:$("v-period").value
+    }});
+    state.lastVariance=payload;
+    $("variance-result").innerHTML=renderVariance(payload);
+    const rp=document.querySelector("[data-v-reperform]");
+    if(rp) rp.addEventListener("click", ()=>reperformRun(rp,payload.trace_ref.run_id,"v-reperform-slot"));
+    const ex=document.querySelector("[data-v-export]");
+    if(ex) ex.addEventListener("click", ()=>downloadJson(`costpilot-variance-${payload.trace_ref.run_id||"pack"}.json`, payload));
+  }catch(err){ $("variance-result").innerHTML=errorCard(err); }
+  finally{ setLoading(btn,"Building pack…",false); }
+}
+
+function renderVariance(payload){
+  const r=payload.result; const s=r.summary; const c=r.components;
+  const tiles=[
+    ["Material cost variance",c.material,true],["Labour cost variance",c.labor,true],
+    ["Variable overhead",c.variable_overhead,true],["Fixed overhead",c.fixed_overhead,true],
+    ["Flexible-budget variance",c.flexible_budget,true],["Net account flux",c.account_flux,true],
+    ["Absorption operating income",c.costing_bridge,false],["Variable operating income",null,false]
+  ].map(([label,comp,showFav])=>{
+    let value, unit, fav;
+    if(comp){ value=comp.display; unit=comp.unit; fav=comp.favorable; }
+    else { value=s.variable_operating_income; unit="INR"; fav=null; }
+    return `<div class="tile"><div class="lab">${esc(label)}</div><div class="val ${numClass(value)}">${esc(fmtValue(value,unit))}${showFav?favBadge(fav):""}</div><div class="sub">${comp?esc(comp.value==="0"?"zero":"trace in card"):"bridge starting point"}</div></div>`;
+  }).join("");
+
+  const componentCard=(name,comp)=>{
+    if(!comp) return "";
+    const titles={material:"Material variances",labor:"Labour variances",variable_overhead:"Variable overhead",fixed_overhead:"Fixed overhead",flexible_budget:"Flexible budget",account_flux:"Account flux",costing_bridge:"Absorption bridge"};
+    const facts=(comp.facts||[]).map(f=>`<tr><td>${esc(f.label)}</td><td class="num ${numClass(f.value)}">${esc(fmtValue(f.display,f.unit))}</td></tr>`).join("");
+    const warnings=(comp.warnings||[]).map(w=>`<div class="warning ${w.severity==="info"?"info":""}"><span class="w-title">${esc(w.code)}</span>${esc(w.message)}</div>`).join("");
+    const validation=(comp.meta&&comp.meta.validation)||{};
+    const val=Object.entries(validation).filter(([k])=>k!=="failures").map(([k,val])=>`<span class="val-chip ${val==="pass"?"pass":"fail"}">${esc(k)}</span>`).join("");
+    let extra="";
+    if(name==="flexible_budget" && comp.meta && comp.meta.lines){
+      const rows=comp.meta.lines.map(l=>`<tr><td>${esc(l.name)}</td><td class="num">${esc(fmtValue(l.static_budget,"INR"))}</td><td class="num">${esc(fmtValue(l.flexed_budget,"INR"))}</td><td class="num">${esc(fmtValue(l.actual,"INR"))}</td><td class="num ${numClass(l.flexible_variance)}">${esc(fmtValue(l.flexible_variance,"INR"))}${favBadge(l.favorable)}</td><td class="num ${numClass(l.volume_variance)}">${esc(fmtValue(l.volume_variance,"INR"))}</td></tr>`).join("");
+      extra=`<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Line</th><th class="num">Static</th><th class="num">Flexed</th><th class="num">Actual</th><th class="num">Flexible var.</th><th class="num">Volume var.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+    if(name==="account_flux" && comp.meta && comp.meta.lines){
+      const rows=comp.meta.lines.map(l=>`<tr><td>${esc(l.account_id)} ${esc(l.label)}</td><td class="num">${esc(fmtValue(l.actual,"INR"))}</td><td class="num">${esc(fmtValue(l.budget,"INR"))}</td><td class="num ${numClass(l.budget_variance)}">${esc(fmtValue(l.budget_variance,"INR"))}${favBadge(l.favorable)}</td><td class="num ${numClass(l.residual)}">${esc(fmtValue(l.residual,"INR"))}</td><td><span class="src">unexplained</span></td></tr>`).join("");
+      extra=`<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Account</th><th class="num">Actual</th><th class="num">Budget</th><th class="num">Variance</th><th class="num">Residual</th><th>Decomposition</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+    if(name==="costing_bridge"){
+      const im=comp.meta||{};
+      extra=`<p class="small" style="margin:10px 0 0">Inventory movement ${esc(im.inventory_change_units||"—")} units; fixed overhead carried at the standard rate. The bridge ties to the absorption result.</p>`;
+    }
+    return `<article class="card pack-card" style="padding:20px">
+      <div class="pack-card-head"><h3>${esc(titles[name]||name)}</h3><div class="pack-value ${numClass(comp.value)}">${esc(fmtValue(comp.display,comp.unit))}${favBadge(comp.favorable)}</div></div>
+      <div class="table-wrap"><table><thead><tr><th>Fact</th><th class="num">Value</th></tr></thead><tbody>${facts}</tbody></table></div>
+      ${extra}${warnings}
+      <div class="val-chips">${val}</div>
+    </article>`;
+  };
+
+  const order=["material","labor","variable_overhead","fixed_overhead","flexible_budget","account_flux","costing_bridge"];
+  return `
+  <div class="summary-tiles">${tiles}</div>
+  <div class="pack-grid">${order.map(n=>componentCard(n,c[n])).join("")}</div>
+  <div class="card" style="padding:20px 22px;margin-top:18px">
+    <div class="section-head" style="margin-bottom:8px"><div><h2 style="font-size:22px">Pack trace</h2><p>${esc(s.product_id)} · ${esc(s.plant_id)} · ${esc(s.period_id)} · standard hours ${esc(s.standard_hours_allowed)}</p></div></div>
+    <div class="audit-meta">
+      <div>Run id<div class="v">${esc(payload.trace_ref.run_id||"—")}</div></div>
+      <div>Event hash<div class="v">${esc(payload.trace_ref.event_hash||"—")}</div></div>
+      <div>Snapshot<div class="v">${esc(payload.snapshot_id)}</div></div>
+    </div>
+    <div class="val-chips"><span class="val-chip ${payload.validation.all_components_pass?"pass":"fail"}">all components: ${payload.validation.all_components_pass?"pass":"fail"}</span><span class="val-chip">flux decomposition: ${esc(s.decomposition_status)}</span></div>
+    <div id="v-reperform-slot"></div>
+    <div class="confirm-actions"><button class="btn secondary small" type="button" data-v-reperform>Re-perform this pack</button><button class="btn secondary small" type="button" data-v-export>Export pack JSON</button><a class="small" href="/api/runs/${encodeURIComponent(payload.trace_ref.run_id||"")}" target="_blank" rel="noopener">Open raw run JSON</a></div>
+  </div>`;
+}
+
+/* ---------- rules and gates ---------- */
+
+function renderGates(gates){
+  const target=$("gates"); if(!target) return;
+  target.innerHTML=(gates||[]).map(g=>`
+    <div class="gate"><div class="top"><span class="id">${esc(g.id)}</span><span class="status ${esc(g.status)}">${esc(g.status)}</span></div>
+    <div class="name">${esc(g.name)}</div><div class="detail">${esc(g.detail)}</div>${g.remediation?`<div class="detail">Next: ${esc(g.remediation)}</div>`:""}</div>`).join("");
+}
+
+async function loadRules(){
+  if(state.rules) return;
+  try{
+    const payload=await api("/api/rules");
+    state.rules=payload;
+    $("rulebook-meta").textContent=`Rulebook ${payload.rulebook_version} · registry version ${payload.registry_version} · ${payload.rules.length} rules`;
+    const groups={};
+    for(const rule of payload.rules){ (groups[rule.module]=groups[rule.module]||[]).push(rule); }
+    $("rules").innerHTML=Object.entries(groups).map(([module,rules])=>`
+      <div class="rule-module"><h3>${esc(module)}</h3><div class="table-wrap"><table class="rule-table">
+      <thead><tr><th>Rule</th><th>Title</th><th>Formula</th><th>Version</th><th>Citation</th></tr></thead>
+      <tbody>${rules.map(rule=>`<tr><td class="id">${esc(rule.id)}</td><td>${esc(rule.title)}</td><td class="mono small">${esc(rule.formula)}</td><td class="mono small">${esc(rule.version)}</td><td class="small">${esc(rule.citation)}</td></tr>`).join("")}</tbody>
+      </table></div></div>`).join("");
+  }catch(err){ $("rules").innerHTML=errorCard(err); }
+}
+
+/* ---------- tabs and bindings ---------- */
+
+function showTab(name){
+  document.querySelectorAll(".panel").forEach(p=>p.classList.add("hidden"));
+  $("panel-"+name).classList.remove("hidden");
+  document.querySelectorAll(".tab").forEach(t=>{ const active=t.dataset.tab===name; t.classList.toggle("active",active); t.setAttribute("aria-selected",String(active)); });
+  if(name==="variance" && !state.lastVariance){ runVariance(); }
+  if(name==="rules"){ loadRules(); }
+}
+
+document.querySelectorAll(".tab").forEach(tab=>tab.addEventListener("click",()=>showTab(tab.dataset.tab)));
+$("preview-btn").addEventListener("click", previewSpecial);
+$("variance-btn").addEventListener("click", runVariance);
+["so-product","so-plant","so-period","so-units","so-price","so-fixed","so-capacity","so-idle","so-selling"].forEach(id=>{
+  const node=$(id); if(node) node.addEventListener("input", markStale); if(node) node.addEventListener("change", markStale);
+});
+$("so-capacity").addEventListener("change", ()=>{ $("idle-field").style.display = $("so-capacity").value==="idle"?"":"none"; });
+["so-product","so-plant","so-period"].forEach(id=>{
+  const node=$(id); if(node) node.addEventListener("change", ()=>{ $("so-idle").value=""; delete $("so-idle").dataset.auto; previewSpecial(false); });
+});
+["so-idle"].forEach(id=>{ const node=$(id); if(node) node.addEventListener("input", ()=>{ node.dataset.auto="0"; }); });
+
+loadCapability();
+</script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+{
+  "description": "Golden cases. Values are hand-computed from the blueprint worked examples; decimals are strings.",
+  "cases": [
+    {
+      "id": "GOLDEN-DA-SO-001",
+      "decision_type": "special_order",
+      "args": {
+        "order_units": "2000",
+        "order_price": "380",
+        "variable_manufacturing_cost": "300",
+        "regular_price": "500",
+        "regular_variable_selling_cost": "20",
+        "incremental_fixed_cost": "40000",
+        "capacity_state": "idle",
+        "idle_capacity_units": "2200"
+      },
+      "value": "120000",
+      "facts": {"f_contribution": "160000", "f_profit": "120000", "f_floor": "320"},
+      "verdict": "accept, conditionally"
+    },
+    {
+      "id": "GOLDEN-DA-SO-002",
+      "decision_type": "special_order",
+      "args": {
+        "order_units": "2000",
+        "order_price": "380",
+        "variable_manufacturing_cost": "300",
+        "regular_price": "500",
+        "regular_variable_selling_cost": "20",
+        "incremental_fixed_cost": "40000",
+        "capacity_state": "idle",
+        "idle_capacity_units": "1000"
+      },
+      "value": "-60000",
+      "facts": {"f_contribution": "160000", "f_opportunity": "180000", "f_floor": "410"},
+      "verdict": "reject"
+    },
+    {
+      "id": "GOLDEN-DA-MB-001",
+      "decision_type": "make_or_buy",
+      "args": {
+        "units": "1000",
+        "variable_cost_per_unit": "300",
+        "avoidable_fixed": "50000",
+        "purchase_price": "360",
+        "materiality": "1000"
+      },
+      "value": "10000",
+      "facts": {"f_make": "350000", "f_buy": "360000", "f_advantage": "10000"},
+      "verdict": "make"
+    },
+    {
+      "id": "GOLDEN-DA-AD-001",
+      "decision_type": "add_or_drop",
+      "args": {
+        "revenue": "900000",
+        "variable_costs": "540000",
+        "avoidable_fixed": "120000",
+        "allocated_fixed": "80000",
+        "lost_units": "200",
+        "related_contribution_per_unit": "60"
+      },
+      "value": "228000",
+      "facts": {"f_margin": "228000", "f_contribution": "360000"},
+      "verdict": "keep"
+    },
+    {
+      "id": "GOLDEN-DA-SP-001",
+      "decision_type": "sell_or_process",
+      "args": {
+        "units": "5000",
+        "split_off_price": "120",
+        "processed_price": "180",
+        "processing_cost_per_unit": "30",
+        "incremental_fixed": "50000"
+      },
+      "value": "100000",
+      "facts": {"f_advantage": "100000"},
+      "verdict": "process further"
+    },
+    {
+      "id": "GOLDEN-DA-SD-001",
+      "decision_type": "operate_or_shutdown",
+      "args": {
+        "units": "0",
+        "price": "400",
+        "variable_cost": "320",
+        "avoidable_fixed": "150000",
+        "restart_cost": "20000"
+      },
+      "value": "130000",
+      "facts": {"f_advantage": "130000", "f_lost": "0", "f_savings": "130000"},
+      "verdict": "shut down"
+    },
+    {
+      "id": "GOLDEN-DA-PM-001",
+      "decision_type": "product_mix",
+      "args": {
+        "capacity_units": "10000",
+        "products": [
+          {"product_id": "A", "price": "100", "variable_cost": "60", "demand_units": "400", "resource_units_per_unit": "2"},
+          {"product_id": "B", "price": "90", "variable_cost": "40", "demand_units": "600", "resource_units_per_unit": "1"}
+        ]
+      },
+      "value": "46000",
+      "facts": {"f_total": "46000"},
+      "verdict": "optimal mix"
+    },
+    {
+      "id": "GOLDEN-DA-CVP-001",
+      "decision_type": "cvp",
+      "args": {
+        "price": "500",
+        "variable_cost": "300",
+        "fixed_costs": "400000",
+        "actual_units": "3000"
+      },
+      "value": "200000",
+      "facts": {"f_be_units": "2000", "f_be_revenue": "1000000", "f_dol": "3"},
+      "verdict": "above break-even"
+    }
+  ]
+}

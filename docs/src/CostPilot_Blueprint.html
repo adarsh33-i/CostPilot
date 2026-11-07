@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CostPilot — Build Blueprint</title>
+<style>
+@page { size: A4; margin: 16mm 14mm 17mm 14mm; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+* { box-sizing: border-box; }
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 9.3pt; line-height: 1.45; color: #1b2830; margin: 0;
+  font-variant-numeric: proportional-nums;
+}
+h1 {
+  font-size: 19.5pt; line-height: 1.15; color: #12324a; margin: 8.5mm 0 3.5mm;
+  letter-spacing: -0.015em; page-break-before: auto; page-break-after: avoid;
+  border-bottom: 1.2pt solid #12324a; padding-bottom: 3mm;
+}
+h1 .num { color: #0f6b63; font-weight: 700; margin-right: 3mm; }
+h2 { font-size: 12pt; color: #0f6b63; margin: 5.2mm 0 1.8mm; page-break-after: avoid; }
+h3 { font-size: 10.2pt; color: #12324a; margin: 3.8mm 0 1.4mm; page-break-after: avoid; }
+p { margin: 0 0 2.4mm; orphans: 2; widows: 2; }
+ul, ol { margin: 0 0 3mm 4.5mm; padding-left: 3.5mm; }
+li { margin-bottom: 1.1mm; }
+strong { color: #12324a; }
+em { color: #2b3f4a; }
+table { width: 100%; border-collapse: collapse; margin: 1.8mm 0 4mm; font-size: 8.1pt; line-height: 1.36; }
+th {
+  background: #edf2f1; color: #12324a; text-align: left; font-weight: 700;
+  padding: 1.7mm 1.9mm; border-bottom: 1pt solid #12324a; vertical-align: bottom;
+}
+td { padding: 1.35mm 1.9mm; border-bottom: 0.4pt solid #d7dee1; vertical-align: top; }
+tr { page-break-inside: avoid; }
+tbody tr:nth-child(even) td { background: #fafbfb; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.1pt;
+  background: #f0f4f3; padding: 0.15mm 0.9mm; border-radius: 0.8mm; color: #143b3a;
+}
+pre {
+  background: #f5f8f7; border-left: 2.6pt solid #0f6b63; padding: 3mm 3.5mm;
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 7.25pt;
+  line-height: 1.4; white-space: pre-wrap; page-break-inside: avoid;
+  margin: 2mm 0 4.2mm; color: #20343c;
+}
+pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+.callout {
+  background: #f3f7f6; border: 0.5pt solid #d5e2de; border-left: 3pt solid #0f6b63;
+  padding: 3mm 4mm; margin: 3mm 0 4mm; page-break-inside: avoid;
+}
+.callout.warn { border-left-color: #b7791f; background: #fbf7ee; border-color: #eadfc9; }
+.callout p:last-child { margin-bottom: 0; }
+.kicker {
+  text-transform: uppercase; letter-spacing: 0.14em; font-size: 7.4pt;
+  color: #0f6b63; font-weight: 700;
+}
+.small { font-size: 8pt; color: #5c6d75; }
+.muted { color: #5c6d75; }
+.fbadge { font-weight: 700; color: #0f6b63; }
+.abadge { font-weight: 700; color: #a63a2f; }
+.tag {
+  display: inline-block; font-size: 7pt; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; padding: 0.5mm 1.6mm; border-radius: 2mm;
+  background: #e5eeec; color: #0f5c55;
+}
+.tag.warn { background: #f4ead5; color: #8a5a12; }
+.tag.block { background: #f2dfdc; color: #8c3329; }
+/* cover */
+.cover { page-break-after: always; padding-top: 0; }
+.toc-page { page-break-after: always; }
+.cover-band { height: 7mm; background: #12324a; margin: 0 0 22mm; }
+.cover .kicker { font-size: 8pt; margin-bottom: 5mm; }
+.cover-title { font-size: 44pt; line-height: 1.02; color: #12324a; border: none; padding: 0; margin: 0 0 7mm; page-break-before: avoid; letter-spacing: -0.03em; }
+.cover-sub { font-size: 14pt; line-height: 1.4; color: #33505f; max-width: 132mm; margin-bottom: 24mm; }
+.cover-meta { border-top: 1pt solid #12324a; padding-top: 4mm; font-size: 8.4pt; color: #33505f; }
+.cover-meta table { font-size: 8.4pt; margin: 0; }
+.cover-meta td { border: none; padding: 1mm 3mm 1mm 0; background: none !important; }
+.cover-note { margin-top: 30mm; font-size: 8.2pt; color: #5c6d75; max-width: 140mm; }
+/* TOC */
+.toc { margin-top: 4mm; }
+.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+.toc li { margin: 0; padding: 1.7mm 0; border-bottom: 0.4pt solid #dde4e5; font-size: 9.4pt; }
+.toc li::before { counter-increment: toc; content: counter(toc) ".  "; color: #0f6b63; font-weight: 700; }
+.toc .sub { color: #5c6d75; font-size: 8.2pt; display: block; margin-left: 7mm; }
+/* diagrams */
+.diagram { margin: 3mm 0 5mm; page-break-inside: avoid; }
+.row { display: flex; gap: 2.5mm; align-items: stretch; justify-content: center; }
+.node {
+  border: 0.6pt solid #9fb3bd; background: #ffffff; padding: 2mm 2.6mm;
+  border-radius: 1.4mm; font-size: 7.7pt; line-height: 1.3; text-align: center;
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+}
+.node b { display: block; font-size: 8.1pt; color: #12324a; margin-bottom: 0.5mm; }
+.node.primary { border-color: #12324a; background: #edf2f6; }
+.node.engine { border-color: #0f6b63; background: #e9f2f0; }
+.node.store { border-color: #b7791f; background: #fbf7ee; }
+.node.audit { border-color: #5c6d75; background: #f2f4f5; }
+.arrow { text-align: center; color: #6b818b; font-size: 9pt; line-height: 1; padding: 1.2mm 0; }
+.arrow span { font-size: 7pt; color: #6b818b; margin-left: 2mm; letter-spacing: 0.03em; }
+.lane-label { font-size: 7pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #5c6d75; margin-bottom: 1mm; }
+.split { display: flex; gap: 4mm; }
+.split > div { flex: 1; }
+.kv { font-size: 8.4pt; }
+.kv td { border-bottom: 0.4pt solid #e1e6e8; }
+.kv td:first-child { width: 32%; color: #33505f; font-weight: 600; }
+.formula { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.1pt; color: #12324a; background: #f7f9f9; padding: 0.6mm 1mm; border-radius: 0.8mm; }
+.checklist { list-style: none; margin-left: 0; padding-left: 0; }
+.checklist li { padding-left: 5.5mm; text-indent: -5.5mm; }
+.checklist li::before { content: "□"; color: #0f6b63; margin-right: 2mm; }
+.sig { border-top: 0.6pt solid #9fb3bd; padding-top: 2mm; font-size: 8pt; color: #5c6d75; }
+</style>
+</head>
+<body>
+
+<!-- ============================== COVER ============================== -->
+<section class="cover">
+  <div class="cover-band"></div>
+  <div class="kicker">CostPilot · Technical specification</div>
+  <h1 class="cover-title">Build Blueprint</h1>
+  <p class="cover-sub">Architecture, contracts, data model, engine rulebook, and delivery gates for the management-accounting copilot.</p>
+
+  <div class="cover-meta">
+    <table>
+      <tr><td>Version</td><td>1.0 — November 2026</td></tr>
+      <tr><td>Status</td><td>Build-ready for Phase 1; extension contracts defined for Phase 2</td></tr>
+      <tr><td>Audience</td><td>Engineering lead, backend and frontend engineers, cost-accounting SME, product owner</td></tr>
+      <tr><td>Companions</td><td>CostPilot White Paper; Phase 1 Plan; Phase 2 Plan</td></tr>
+      <tr><td>Scope</td><td>Phase 1 in build detail; Phase 2 interfaces, schema extensions, and sequencing</td></tr>
+    </table>
+  </div>
+
+  <p class="cover-note">This document fixes the structural decisions that are expensive to reverse: the trust boundary between the language model and the calculation engine, the cost data model, the audit trace, and the rule registry. Visual design, pricing, and go-to-market remain outside its scope.</p>
+</section>
+
+<!-- ============================== TOC ============================== -->
+<section class="toc-page">
+  <div class="kicker">Contents</div>
+  <div class="toc">
+    <ol>
+      <li>Purpose and scope <span class="sub">What this document decides, and what it deliberately leaves open</span></li>
+      <li>Design invariants <span class="sub">Ten rules that every component and every test must enforce</span></li>
+      <li>System architecture <span class="sub">Runtime shape, request lifecycle, deployment topology</span></li>
+      <li>The LLM contract <span class="sub">Planner schema, tool registry, confirmation, slot-based narration</span></li>
+      <li>Cost data layer <span class="sub">Dimensional model, account registry, quality gates, snapshots</span></li>
+      <li>Deterministic engine <span class="sub">Rulebook, calculation results, worked examples, edge cases</span></li>
+      <li>Audit and explainability <span class="sub">Trace object, hash chain, re-performance, analysis-card requirements</span></li>
+      <li>API and interface contracts <span class="sub">Endpoints, streaming events, error taxonomy, exports</span></li>
+      <li>Repository and engineering standards <span class="sub">Monorepo layout, stack decisions, CI gates, security</span></li>
+      <li>Test and evaluation strategy <span class="sub">Golden cases, property tests, LLM evals, performance budgets</span></li>
+      <li>Delivery roadmap <span class="sub">M0–M11, dependencies, exit gates, team shape</span></li>
+      <li>Risks and open decisions <span class="sub">Build risks, defaults needing sign-off, out-of-scope contract</span></li>
+      <li>Appendices <span class="sub">Glossary, schemas, rulebook template, source traceability</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================== 1 ============================== -->
+<h1><span class="num">1</span>Purpose and scope</h1>
+
+<p>CostPilot already has three documents that establish intent. The White Paper argues why management accounting is the unattended territory and what the product is. The Phase 1 Plan defines modules, milestones, and success criteria. The Phase 2 Plan adds activity-based costing, budgeting, performance measurement, connectors, and monitoring. This blueprint is the fourth document: it translates those documents into the contracts an engineering team can build against.</p>
+
+<p>It is deliberately opinionated. Where the phase plans leave a technical choice open, this document names a default, records the trade-off, and assigns the decision an owner. That is not an attempt to freeze the product. It is an attempt to freeze the parts that become expensive to change after the first pilot: the data model, the boundary between model and engine, the audit trace, and the rulebook.</p>
+
+<h2>1.1 What “blueprint” means here</h2>
+<p>Not a UI specification and not a sprint plan. The blueprint covers the structural layer:</p>
+<ul>
+  <li><strong>Contracts</strong> between the user interface, the planner model, the tool registry, the calculation engine, and the audit service.</li>
+  <li><strong>Schemas</strong> for the cost data layer, the rulebook, the calculation trace, and the API payloads.</li>
+  <li><strong>Policy</strong> for sign conventions, rounding, units, missing data, capacity assumptions, and refusal behaviour.</li>
+  <li><strong>Gates</strong> that decide when a milestone is actually complete and when an answer is allowed to reach a user.</li>
+</ul>
+<p>Interface copy, chart styling, onboarding, and the precise wording of prompts will change weekly. The decisions here should not.</p>
+
+<h2>1.2 Phase 1 is done when</h2>
+<div class="callout">
+  <p>A cost analyst can load one month of GL actuals, standard costs, budgets, and volumes for a three-product, two-plant manufacturer; ask a variance question or one of seven short-run decision questions; and receive an answer whose every figure is computed by the engine, traceable to source records and rule IDs, and re-performable by a controller. The same question against the same snapshot returns the same numbers, byte for byte. The working paper exports to Excel without a parallel spreadsheet.</p>
+</div>
+<p>That statement is narrower than the product vision and broader than a demo. It requires the data layer, the variance engine, the decision engine, the planner, the audit surface, and the export path to work together on one realistic dataset. It does not require ABC, ERP connectors, or multi-entity consolidation.</p>
+
+<h2>1.3 Build order</h2>
+<p>The dependency chain is strict. Data and formulas come first because every later module consumes their contracts. The variance explainer comes next because it exercises the full trace and narration path on a familiar finance output. The decision engine follows, because its outputs are the sales demo and because it stress-tests assumption handling. The conversational shell comes last, not because it is unimportant but because a planner without trustworthy tools is a demo, not a product.</p>
+<pre>M0  contracts, trace, decimal arithmetic, golden harness
+ └─ M1  cost data layer + variance formulas
+     ├─ M2  variance &amp; flux explainer + raw audit panel
+     │   └─ M4  chat shell, planner, confirmation, RBAC
+     └─ M3  short-run decision engine
+         └─ M5  pilot hardening, live close pack</pre>
+<p>Phase 2 follows the same pattern: connector foundation first, because ABC driver data, alerting, and scorecard KPIs all depend on richer ingestion; ABC second, because it is the strongest value demonstration; then monitoring, budgeting, performance, and group reporting. Section 11 gives the full sequence with exit gates.</p>
+
+<h2>1.4 Deliberate non-goals</h2>
+<p>Phase 1 is not a general ledger, an ERP, a report writer, a forecasting system, or a general-purpose finance chatbot. It does not write back to any system. It does not support multi-currency translation, intercompany elimination, or ABC. It does not infer account classifications silently and it does not answer a question whose data is missing by estimating a plausible number. Section 12.3 restates these as a scope contract that change control must explicitly reopen.</p>
+
+<!-- ============================== 2 ============================== -->
+<h1><span class="num">2</span>Design invariants</h1>
+
+<p>An invariant is a property that must hold for every run, in every environment, for the life of the product. Each one below has an enforcement mechanism and a test. If an invariant cannot be enforced mechanically, it is a wish, not an invariant. The ten that follow are the ones most likely to be violated under delivery pressure.</p>
+
+<table>
+  <thead>
+    <tr><th style="width:5%">#</th><th style="width:24%">Invariant</th><th style="width:43%">Enforcement</th><th style="width:28%">Test</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>I1</strong></td><td><strong>Engine authority.</strong> No number in an answer originates from the language model.</td><td>Narration is slot-based: the model receives fact IDs and may emit only <code>{{id|format}}</code> placeholders. Raw digits and spelled-out quantities are rejected before rendering. Verdict sentences are deterministic templates selected by the engine, not written by the model.</td><td>Provenance validator; adversarial prompt suite; CI check that planner prompts contain no arithmetic results.</td></tr>
+    <tr><td><strong>I2</strong></td><td><strong>Basis is always labelled.</strong> Actual, budget, flexible-budget, standard, and forecast figures are never mixed without a visible basis and period.</td><td>Every fact row carries <code>basis</code>, <code>period_id</code>, <code>snapshot_id</code>, and <code>unit</code>. The renderer prints basis chips in the card header and on every table.</td><td>Contract tests reject facts without basis; UI snapshot tests assert the chip.</td></tr>
+    <tr><td><strong>I3</strong></td><td><strong>Snapshot determinism.</strong> Same question against the same snapshot, engine, and rulebook returns the same numbers.</td><td>Run pins snapshot hash, engine semver, rulebook version, registry version, prompt version, and model ID. Data snapshots are immutable. Execution order is stable; no unordered iteration.</td><td>Re-performance test on every completed run sample; nightly determinism replay.</td></tr>
+    <tr><td><strong>I4</strong></td><td><strong>Provenance completeness.</strong> Every figure links to a calculation step and every step links to source records.</td><td>The <code>CalcResult</code> object cannot be constructed without step IDs and source refs. The validator rejects orphan facts. The audit UI renders the chain.</td><td>Trace completeness test: zero facts without a step; zero steps without a rule ID.</td></tr>
+    <tr><td><strong>I5</strong></td><td><strong>Assumptions are objects.</strong> Capacity, idle time, avoidable cost, and policy choices are stated, confirmed, and versioned. No silent default.</td><td>Planner arguments carry <code>source</code> and <code>confirm</code> flags. The orchestrator blocks execution until every inferred or policy-bearing argument is confirmed. Edits create a new plan version.</td><td>Assumption-gate tests; runs with unconfirmed assumptions must fail closed.</td></tr>
+    <tr><td><strong>I6</strong></td><td><strong>Read-only.</strong> CostPilot never writes to a ledger, ERP, or source system.</td><td>Connectors use least-privilege read credentials; no write endpoints exist; exports are copies. Network policy denies write APIs.</td><td>Architecture test scans connector code for write verbs; credentials audit.</td></tr>
+    <tr><td><strong>I7</strong></td><td><strong>Rule fidelity.</strong> Every formula maps one-to-one to a registered rule with a source citation and test cases.</td><td>Rule registry is the only path to arithmetic. UI, planner, and API cannot contain formulas. Rule changes require version bumps and golden-case updates.</td><td>Golden corpus reproduces every source worked example exactly; import-boundary lint.</td></tr>
+    <tr><td><strong>I8</strong></td><td><strong>Scope isolation.</strong> Entity, plant, and role restrictions are applied inside the query, not after it.</td><td>Query compiler injects row-scope predicates before SQL generation. No endpoint returns unfiltered rows. DuckDB files are per tenant.</td><td>Authorization matrix tests; attempted cross-scope query returns empty plus an access error, never data.</td></tr>
+    <tr><td><strong>I9</strong></td><td><strong>Honest refusal with a path.</strong> Missing data produces a specific remediation, never a guess and never a dead end.</td><td>Every error carries <code>cause</code>, <code>what_was_checked</code>, and a <code>remediation[]</code> array of executable next steps: fix a tag, upload a file, confirm an assumption, choose a period, view the trace.</td><td>Error-catalogue tests assert remediation is present and actionable for every code.</td></tr>
+    <tr><td><strong>I10</strong></td><td><strong>Explainability is product surface.</strong> The audit view is a first-class panel, not a debug toggle.</td><td>The analysis card cannot render without an audit affordance. Export includes the trace. Acceptance tests require a controller to re-perform from the screen.</td><td>UX acceptance checklist; pilot controller sign-off.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <p><strong>The invariant most likely to erode is I1.</strong> It is easy to let a model “just tidy” a number, restate a percentage, or convert units in prose. Every such convenience reintroduces the failure the product exists to prevent. The slot protocol in Section 4.6 is intentionally rigid; do not relax it for a nicer sentence.</p>
+</div>
+
+<!-- ============================== 3 ============================== -->
+<h1><span class="num">3</span>System architecture</h1>
+
+<p>The runtime is a deterministic orchestrator around a language model, not an autonomous agent around a database. The distinction matters. The model proposes a plan; the orchestrator decides whether the plan is admissible, what it is allowed to touch, and when the result is fit to show. The engine computes; the renderer formats; the audit service records. No component is trusted to do another’s job.</p>
+
+<h2>3.1 Runtime shape</h2>
+<div class="diagram">
+  <div class="row"><div class="node primary"><b>Web client</b>Chat, guided forms, analysis cards, audit drawer, exports</div></div>
+  <div class="arrow">↓ <span>HTTPS · SSE</span></div>
+  <div class="row"><div class="node primary"><b>API gateway</b>OIDC auth · sessions · run CRUD · streaming · rate limits</div></div>
+  <div class="arrow">↓</div>
+  <div class="row"><div class="node primary"><b>Orchestrator</b>State machine · policy · retries · time budgets · version pinning</div></div>
+  <div class="arrow">↓ <span>plan JSON</span></div>
+  <div class="row">
+    <div class="node"><b>Planner (LLM)</b>Intent, tool choice, parameter extraction, clarification. No arithmetic.</div>
+    <div class="node"><b>Tool registry</b>Typed, versioned tools; JSON Schema; allowlist; capability checks.</div>
+    <div class="node"><b>Metadata tools</b>Dataset description, dimension lookup, account search, quality status.</div>
+  </div>
+  <div class="arrow">↓ <span>validated tool call</span></div>
+  <div class="row">
+    <div class="node engine"><b>Execution service</b>Snapshot pinning · scoped SQL compilation · engine invocation</div>
+    <div class="node store"><b>Cost data layer</b>Immutable DuckDB/Parquet snapshot · registry · quality results</div>
+    <div class="node engine"><b>Deterministic engine</b>Pure Python modules · Decimal · rule IDs · step trace</div>
+  </div>
+  <div class="arrow">↓ <span>CalcResult + facts</span></div>
+  <div class="row">
+    <div class="node"><b>Validator</b>Schema · identities · units · coverage · provenance</div>
+    <div class="node"><b>Renderer</b>Verdict templates · number formatting · slot substitution</div>
+    <div class="node audit"><b>Audit service</b>Append-only trace · hash chain · re-performance</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="row"><div class="node primary"><b>Response card + audit trail</b>Verdict, facts, tables, assumptions, sources, export</div></div>
+</div>
+
+<h2>3.2 Component responsibilities</h2>
+<table>
+  <thead><tr><th style="width:18%">Component</th><th style="width:46%">Owns</th><th style="width:36%">Must never</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Web client</strong></td><td>Conversation, guided forms, analysis-card rendering, assumption chips, audit drawer, export controls.</td><td>Compute, round, or derive a figure; hide the basis; render a number absent from the response payload.</td></tr>
+    <tr><td><strong>API gateway</strong></td><td>Authentication, session ownership, run access, streaming, rate limits, request validation.</td><td>Apply business logic or bypass orchestrator policy.</td></tr>
+    <tr><td><strong>Orchestrator</strong></td><td>State machine, plan admission, confirmation gate, version pinning, retries, timeouts, fallbacks.</td><td>Let the model call the engine directly; proceed with an unconfirmed policy assumption.</td></tr>
+    <tr><td><strong>Planner</strong></td><td>Intent classification, tool selection, parameter extraction, one focused clarification question, assumption proposals.</td><td>Compute, estimate, convert units, invent IDs, narrate results, or see raw ledgers.</td></tr>
+    <tr><td><strong>Tool registry</strong></td><td>Tool schemas, versions, capability requirements, compatibility, deprecation.</td><td>Expose an untyped or unversioned tool; permit arbitrary SQL.</td></tr>
+    <tr><td><strong>Execution service</strong></td><td>Resolving arguments to dimensions, compiling scoped queries, invoking engine modules, assembling the result envelope.</td><td>Guess a dimension match; read outside the pinned snapshot.</td></tr>
+    <tr><td><strong>Cost data layer</strong></td><td>Canonical schema, account registry, ingestion, quality gates, immutable snapshots, period state.</td><td>Mutate a frozen snapshot; silently coerce an untagged account.</td></tr>
+    <tr><td><strong>Deterministic engine</strong></td><td>All arithmetic: variances, flexible budgets, CVP, differential analysis, costing bridge, ABC, budgets, performance.</td><td>Perform I/O, read the database, call the model, use floats, or hide a policy choice.</td></tr>
+    <tr><td><strong>Validator</strong></td><td>Schema, identity, unit, basis, coverage, assumption, and provenance checks. Decides whether an answer may ship.</td><td>Warn and continue on a blocking failure.</td></tr>
+    <tr><td><strong>Renderer</strong></td><td>Deterministic templates for verdicts, tables, formatting, slot substitution, export layout.</td><td>Let the model supply a raw numeral or override a verdict.</td></tr>
+    <tr><td><strong>Audit service</strong></td><td>Immutable run record, hash chain, trace retrieval, re-performance, retention.</td><td>Update or delete a sealed run; store secrets.</td></tr>
+  </tbody>
+</table>
+
+<h2>3.3 Request lifecycle</h2>
+<ol>
+  <li><strong>Receive.</strong> The API authenticates the user, resolves tenant and row scope, and appends the message to the session.</li>
+  <li><strong>Ground.</strong> The orchestrator builds a planner context: a capability card (datasets, periods, dimensions, supported analyses, data-quality status), a conversation summary, and references to prior run IDs. No raw ledger rows.</li>
+  <li><strong>Plan.</strong> The planner returns a plan JSON: intent, tool, arguments, assumptions, missing fields, and at most one clarification question.</li>
+  <li><strong>Admit.</strong> The orchestrator validates the plan against the tool schema and policy. Unknown tools, out-of-scope dimensions, arithmetic fields, or unregistered decision types are rejected.</li>
+  <li><strong>Confirm.</strong> If any argument is inferred, defaulted, or policy-bearing, the user sees a parameter sheet with value, source, and edit control. Execution waits. Edits create a new plan version.</li>
+  <li><strong>Pin.</strong> The orchestrator creates a run and pins the snapshot, registry, engine, rulebook, prompt, and model versions. The input hash is computed.</li>
+  <li><strong>Execute.</strong> The execution service resolves dimensions, compiles scoped SQL, and calls the engine. Heavy scans run against pre-aggregated marts where possible.</li>
+  <li><strong>Compute.</strong> The engine returns a <code>CalcResult</code> with steps, facts, assumptions, warnings, and source references. No prose yet.</li>
+  <li><strong>Validate.</strong> Schema, identity, unit, coverage, basis, and provenance checks run. A blocking failure stops the run with a remediation card.</li>
+  <li><strong>Render.</strong> The renderer selects the verdict template from the engine’s decision output, requests a rationale from the model using fact slots only, validates the rationale, and substitutes formatted values.</li>
+  <li><strong>Seal.</strong> The audit record is hashed and appended. The response streams to the client with the run ID.</li>
+  <li><strong>Follow up.</strong> The card offers export, re-performance, a trace view, and suggested next questions generated from the capability card, not from the model’s imagination.</li>
+</ol>
+
+<div class="callout">
+  <p><strong>No answer exists before step 9 passes.</strong> Partial results, “rough” numbers, and provisional narratives are not sent. A failed validation produces an error card with the checked facts and a path forward, never a softened answer.</p>
+</div>
+
+<h2>3.4 Two interaction lanes, one contract</h2>
+<div class="split">
+  <div>
+    <h3>Question lane</h3>
+    <p>Free-text or voice-transcribed question. The planner selects a tool and extracts parameters. Best for experienced analysts who know what they want and for follow-ups such as “now assume the idle capacity is only 1,000 units.”</p>
+  </div>
+  <div>
+    <h3>Workflow lane</h3>
+    <p>A guided form generated from the same tool JSON Schema. Required fields, enums, units, and confirmation are identical. Best for non-accountants, for auditability, and as the fallback when the model is unavailable.</p>
+  </div>
+</div>
+<p>The lanes must not diverge. Tool schemas are the single source of truth for fields, validation, and confirmation. The form renderer generates controls from schema annotations (<code>title</code>, <code>description</code>, <code>examples</code>, <code>x-unit</code>, <code>x-confirm</code>). A new workflow is added once, in the registry, and appears in both lanes.</p>
+
+<h2>3.5 Deployment topology</h2>
+<p>The pilot is single-tenant in a customer-controlled VPC or a managed private cloud. Shared multi-tenant DuckDB is prohibited: a snapshot directory contains one tenant’s data and one role scope, and workers are pinned to a tenant for the duration of a job.</p>
+<table>
+  <thead><tr><th style="width:20%">Service</th><th style="width:42%">Role</th><th style="width:38%">Pilot configuration</th></tr></thead>
+  <tbody>
+    <tr><td><strong>web</strong></td><td>Next.js application; server-side session cookie; SSE proxy.</td><td>2 instances behind TLS termination.</td></tr>
+    <tr><td><strong>api</strong></td><td>FastAPI orchestrator and read APIs; no heavy computation in-process.</td><td>2–4 workers; request timeout 30 s; stream heartbeats.</td></tr>
+    <tr><td><strong>worker</strong></td><td>Ingestion, snapshot builds, exports, scheduled monitoring, re-performance jobs.</td><td>Redis-backed queue; one heavy job per worker; memory cap per DuckDB process.</td></tr>
+    <tr><td><strong>Postgres</strong></td><td>Metadata, registry, sessions, runs, audit records, mapping contracts.</td><td>Managed instance; PITR; 7-year audit retention.</td></tr>
+    <tr><td><strong>Object storage</strong></td><td>Raw uploads, canonical Parquet, snapshot manifests, exports.</td><td>Versioning and object lock for sealed snapshots and audit exports.</td></tr>
+    <tr><td><strong>DuckDB</strong></td><td>Query engine over immutable snapshot files; one database per snapshot build.</td><td>Local SSD or attached volume; read-only open; memory limit per worker.</td></tr>
+    <tr><td><strong>LLM gateway</strong></td><td>Egress allowlist, provider abstraction, zero-retention policy, token accounting.</td><td>Region-pinned endpoint; no training on customer data; request logging redacted.</td></tr>
+    <tr><td><strong>Observability</strong></td><td>OpenTelemetry traces, structured logs, metrics, alerting.</td><td>Run IDs propagated end to end; amounts excluded from logs by default.</td></tr>
+  </tbody>
+</table>
+<p>Backups cover Postgres (point-in-time) and object storage (versioned). DuckDB files are rebuildable from Parquet and the manifest; they are cache, not the system of record. A snapshot is not “backed up” as a database file; it is verified by re-hashing its manifest and re-running its quality gates.</p>
+
+<h2>3.6 Centralized versus pluggable</h2>
+<p>Three things stay centralized because fragmentation would break trust: the <strong>rule registry</strong> (one formula set, one sign convention), the <strong>trace format</strong> (one audit schema), and the <strong>validator</strong> (one definition of shippable). Three things are pluggable because Phase 2 and customer environments demand it: <strong>data connectors</strong>, <strong>cost models</strong> (traditional versus ABC/TDABC), and <strong>renderers</strong> (chat card, Excel, PDF). A connector may not introduce a new fact shape without a schema migration; a cost model may not bypass the rule registry.</p>
+<!-- ============================== 4 ============================== -->
+<h1><span class="num">4</span>The LLM contract</h1>
+
+<p>The planner is the only non-deterministic component in the answer path. It is therefore treated as an untrusted proposals engine: useful for language, inadmissible as an authority. The contract below is enforced by schemas and the orchestrator, not by prompt wording alone. A model that ignores the prompt should fail validation, not produce a plausible wrong answer.</p>
+
+<h2>4.1 What the model may and may not do</h2>
+<table>
+  <thead><tr><th style="width:50%">May</th><th style="width:50%">May not</th></tr></thead>
+  <tbody>
+    <tr><td>Classify the question into a registered intent or return “unsupported”.</td><td>Answer a cost question from general knowledge or from numbers in the conversation.</td></tr>
+    <tr><td>Select one tool from the allowlist and populate its arguments.</td><td>Call arbitrary SQL, HTTP, filesystem, or unregistered tools.</td></tr>
+    <tr><td>Resolve names to IDs using metadata tools, returning candidates when ambiguous.</td><td>Invent an account, product, plant, period, or customer ID.</td></tr>
+    <tr><td>Extract operators and operands, such as “price down 10%” or “volume up 2,000 units”.</td><td>Apply the operator. The engine applies the change; the model passes the operand.</td></tr>
+    <tr><td>Propose assumptions with a source, confidence, and confirmation flag.</td><td>Choose an accounting policy, capacity assumption, or avoidable-cost treatment silently.</td></tr>
+    <tr><td>Ask one consolidated clarification question when required fields are missing or ambiguous.</td><td>Ask a sequence of questions it could have combined, or proceed with a guessed value.</td></tr>
+    <tr><td>Write a short rationale using fact slots and cite step IDs.</td><td>Write digits, spelled-out quantities, unit conversions, percentages, or a verdict.</td></tr>
+    <tr><td>Explain the audit trail in plain language with step references.</td><td>Introduce a cause, benchmark, or comparison that is not present in the trace.</td></tr>
+  </tbody>
+</table>
+
+<h2>4.2 Context assembly</h2>
+<p>The planner sees a bounded, metadata-only context. It never receives a ledger extract. The context has four parts:</p>
+<ul>
+  <li><strong>Policy prompt.</strong> Fixed, versioned, and reviewed. Defines the role, the prohibition on arithmetic, the schema, the clarification rule, and the treatment of untrusted text.</li>
+  <li><strong>Capability card.</strong> Dataset and snapshot name, available periods, entities, plants, products, configured currency and units, supported analyses, analysis readiness, and a one-line data-quality status. Example below.</li>
+  <li><strong>Conversation summary.</strong> The last six turns compressed to intent, resolved parameters, prior run IDs, and the facts that were shown. No raw rows.</li>
+  <li><strong>Metadata results.</strong> Output of lookup tools only: dimension candidates, account matches, quality gate summaries. Capped at 20 rows per lookup.</li>
+</ul>
+<pre>{
+  "dataset": "Pilot manufacturer — Sep 2026 close",
+  "snapshot_id": "snap_7f3c…",
+  "periods": ["2026-07", "2026-08", "2026-09"],
+  "entities": [{"id": "ENT-01", "name": "Northline Industries"}],
+  "plants": [{"id": "PLT-01", "name": "Pune"}, {"id": "PLT-02", "name": "Coimbatore"}],
+  "products": [{"id": "PRD-A", "name": "Standard motor"}, {"id": "PRD-B", "name": "Custom motor"}],
+  "currency": "INR",
+  "analysis_ready": {"variance": true, "decisions": true, "costing_bridge": true, "abc": false},
+  "data_quality": {"tag_coverage_weighted": 0.997, "reconciled": true, "blocking_gates": 0},
+  "supported_decisions": ["make_or_buy", "special_order", "add_or_drop", "sell_or_process",
+                          "operate_or_shutdown", "product_mix", "cvp"],
+  "limits": {"max_tool_calls": 3, "max_clarifications": 1}
+}</pre>
+<p>The capability card is generated from the snapshot and the tool registry. It is not written by the model, and it must not claim an analysis is ready when a blocking gate is open.</p>
+
+<h2>4.3 Plan schema</h2>
+<p>The planner’s entire output is a <code>Plan</code> object. There is no free-form tool-call syntax and no code execution. Money and quantities are strings to avoid floating-point drift; the orchestrator parses them into <code>Decimal</code> before execution.</p>
+<pre>{
+  "intent": "special_order",
+  "tool": "run_differential_analysis",
+  "tool_version": "1.0.0",
+  "arguments": {
+    "decision_type": "special_order",
+    "entity_id": "ENT-01",
+    "plant_id": "PLT-01",
+    "period_id": "2026-09",
+    "product_id": "PRD-B",
+    "order_units": "2000",
+    "order_price": {"amount": "380.00", "currency": "INR"},
+    "capacity_state": "idle",
+    "incremental_fixed_cost": {"amount": "40000.00", "currency": "INR"},
+    "variable_selling_cost_avoided": true
+  },
+  "assumptions": [
+    {"key": "capacity_state", "value": "idle",
+     "source": "user_implied", "evidence": "user said the plant has spare capacity",
+     "confidence": 0.84, "confirm": true},
+    {"key": "variable_selling_cost_avoided", "value": true,
+     "source": "policy_default", "evidence": "special-order export treatment",
+     "confidence": 0.70, "confirm": true}
+  ],
+  "missing": [],
+  "clarification": null,
+  "confidence": 0.88
+}</pre>
+<table>
+  <thead><tr><th style="width:20%">Field</th><th style="width:44%">Validation</th><th style="width:36%">Rejection consequence</th></tr></thead>
+  <tbody>
+    <tr><td><code>intent</code></td><td>Must be in the registered intent enum.</td><td>Return capability response; do not guess a nearby intent.</td></tr>
+    <tr><td><code>tool</code></td><td>Must be allowlisted and compatible with the pinned tool-registry version.</td><td>Plan rejected; logged as a planner defect.</td></tr>
+    <tr><td><code>arguments</code></td><td>Strict JSON Schema, <code>additionalProperties: false</code>; enums; decimal strings; currency and unit objects.</td><td>Schema error; one repair attempt, then clarification.</td></tr>
+    <tr><td>Arithmetic fields</td><td>Fields named <code>value</code>, <code>total</code>, <code>profit</code>, <code>variance</code>, <code>result</code> are forbidden in arguments.</td><td>Plan rejected as a trust-boundary violation.</td></tr>
+    <tr><td>IDs</td><td>Must resolve exactly or uniquely through a metadata lookup.</td><td>Ambiguity returns candidates; no fuzzy execution.</td></tr>
+    <tr><td><code>assumptions</code></td><td>Every argument not supplied by the user must appear here with a source and confidence.</td><td>Missing assumption blocks execution.</td></tr>
+    <tr><td><code>confidence</code></td><td>Below 0.60 forces clarification even if the schema is valid.</td><td>No tool call.</td></tr>
+    <tr><td><code>clarification</code></td><td>At most one question, with 2–4 suggested answers and the fields it unblocks.</td><td>Multiple questions are merged by the orchestrator.</td></tr>
+  </tbody>
+</table>
+
+<h2>4.4 Tool catalogue</h2>
+<p>Tools are coarse enough to produce a complete working paper and narrow enough to validate. Each tool returns the standard envelope: result, facts, assumptions, warnings, remediation, trace reference, and snapshot ID. Phase 1 tools are frozen at M0; additions are versioned.</p>
+<table>
+  <thead><tr><th style="width:21%">Tool</th><th style="width:31%">Purpose and key inputs</th><th style="width:30%">Returns</th><th style="width:18%">Milestone</th></tr></thead>
+  <tbody>
+    <tr><td><code>describe_dataset</code></td><td>Capability card for a snapshot; no business inputs.</td><td>Periods, dimensions, readiness, quality summary.</td><td>M1</td></tr>
+    <tr><td><code>resolve_dimension</code></td><td>Type plus query string; entity, plant, product, period, account.</td><td>Ranked exact candidates with IDs; never a single fuzzy match without confidence 1.0.</td><td>M1</td></tr>
+    <tr><td><code>search_accounts</code></td><td>Name or code fragment, statement, behavior filter.</td><td>Up to 20 accounts with tag status.</td><td>M1</td></tr>
+    <tr><td><code>get_data_quality</code></td><td>Snapshot ID.</td><td>Gate results, blocking issues, coverage by amount.</td><td>M1</td></tr>
+    <tr><td><code>run_variance_analysis</code></td><td>Scope, period, basis, threshold profile, account or product filter.</td><td>Standard-cost decomposition or account flux with drill-down and residual.</td><td>M2</td></tr>
+    <tr><td><code>run_flexible_budget</code></td><td>Scope, period, actual volume basis.</td><td>Flexed budget, flexible and volume variances, line decomposition.</td><td>M2</td></tr>
+    <tr><td><code>run_differential_analysis</code></td><td>Decision type plus the specific parameter set; assumptions explicit.</td><td>Differential table, verdict, conditions, sensitivity, qualitative checklist.</td><td>M3</td></tr>
+    <tr><td><code>run_costing_bridge</code></td><td>Scope and period; inventory movement source.</td><td>Variable and absorption operating income, bridge, unreconciled residual.</td><td>M2</td></tr>
+    <tr><td><code>explain_run</code></td><td>Prior run ID.</td><td>Trace summary, rules, sources, assumptions, validator results.</td><td>M4</td></tr>
+    <tr><td><code>run_abc_profitability</code></td><td>Cost pools, drivers, activities, period, allocation method.</td><td>Traditional versus ABC product/customer profitability, unused capacity.</td><td>M7 (Phase 2)</td></tr>
+    <tr><td><code>run_budget_chain</code></td><td>Budget version, scenario overlay, driver assumptions.</td><td>Sales-to-cash budget chain, version diff, scenario comparison.</td><td>M9 (Phase 2)</td></tr>
+    <tr><td><code>run_performance_eval</code></td><td>Division scope, asset base, required return, scorecard weights.</td><td>ROI, residual income, controllable margin, scorecard contribution.</td><td>M10 (Phase 2)</td></tr>
+  </tbody>
+</table>
+
+<h2>4.5 Confirmation protocol</h2>
+<p>Confirmation is the moment the product earns or loses trust. The user must see what the system believes before it calculates, especially when the belief came from implication rather than explicit statement.</p>
+<ul>
+  <li><strong>Every argument has a source:</strong> <code>user_explicit</code>, <code>user_implied</code>, <code>registry</code>, <code>lookup</code>, <code>policy_default</code>, or <code>engine_default</code>.</li>
+  <li><strong>Confirmation is mandatory</strong> for <code>user_implied</code>, <code>policy_default</code>, and any <code>registry</code> or <code>lookup</code> value that changes a policy: capacity state, avoidable versus unavoidable cost, costing basis, allocation method, materiality threshold, or a what-if operator.</li>
+  <li><strong>The parameter sheet</strong> shows the argument label, resolved dimension name, value with unit, source badge, and an edit control. It also shows the fields the plan did not use, so the user can catch a missing driver.</li>
+  <li><strong>Edits create a plan version.</strong> The run pins the version; the audit record stores the diff between the model’s proposal and the user’s confirmed values.</li>
+  <li><strong>Capacity conflicts are surfaced, not resolved.</strong> If the user says “idle capacity” but the snapshot shows utilization above 95% for the period, the sheet warns with the utilization figure and requires an explicit override reason. The engine never silently substitutes an opportunity cost.</li>
+  <li><strong>Auto-execution is narrow.</strong> Only plans with all-explicit arguments, no policy-bearing fields, and complete data may run without a confirmation step. Even then, the analysis card repeats the parameter summary.</li>
+</ul>
+
+<div class="callout warn">
+  <p><strong>Do not let the model state a recommendation before confirmation.</strong> “It looks profitable” in the planning turn is a verdict without a calculation. The planner is instructed to describe the proposed analysis, not its outcome. The UI renders the plan as “I will compare X against Y using Z assumptions”, never as a conclusion.</p>
+</div>
+
+<h2>4.6 Narration: slots, not sentences with numbers</h2>
+<p>The White Paper’s rule is that the model narrates results. The implementation makes that literal. The response has three blocks, and only the middle one involves the model:</p>
+<ol>
+  <li><strong>Verdict block — deterministic.</strong> The engine returns a decision enum (<code>accept</code>, <code>reject</code>, <code>investigate</code>, <code>favorable</code>, <code>adverse</code>, <code>mixed</code>). The renderer selects a fixed sentence template. The model cannot change it.</li>
+  <li><strong>Rationale block — model, slot-only.</strong> The model writes two to four sentences using placeholders such as <code>{{f1|INR}}</code>. It receives the fact table but is forbidden from restating a value manually.</li>
+  <li><strong>Evidence block — deterministic.</strong> Tables, waterfall, assumptions, source links, step list, and export. Always present, always formatted by code.</li>
+</ol>
+<pre>Accepting the order adds {{f1|INR}} of incremental profit. The floor price is
+{{f2|INR}} per unit, and the offer leaves {{f3|INR}} per unit of headroom.
+The conclusion holds only while the capacity assumption is confirmed; if it changes, rerun the analysis.</pre>
+<p>The renderer receives a fact table like this one and substitutes only the referenced values:</p>
+<table>
+  <thead><tr><th style="width:10%">Fact</th><th style="width:40%">Label</th><th style="width:20%">Value</th><th style="width:12%">Unit</th><th style="width:18%">Step</th></tr></thead>
+  <tbody>
+    <tr><td><code>f1</code></td><td>Incremental profit</td><td class="num">120,000.00</td><td>INR</td><td><code>s6</code></td></tr>
+    <tr><td><code>f2</code></td><td>Floor price per unit</td><td class="num">320.00</td><td>INR/unit</td><td><code>s7</code></td></tr>
+    <tr><td><code>f3</code></td><td>Headroom per unit</td><td class="num">60.00</td><td>INR/unit</td><td><code>s8</code></td></tr>
+  </tbody>
+</table>
+
+<h3>Allowed placeholder grammar</h3>
+<p><code>{{fact_id|format}}</code> only. Formats are a fixed allowlist: <code>INR</code>, <code>INR0</code>, <code>PCT1</code>, <code>PCT2</code>, <code>QTY0</code>, <code>QTY2</code>, <code>RATIO2</code>, <code>HOURS1</code>. Formatting is locale-aware and configured per tenant; Indian digit grouping is used for INR by default, international grouping otherwise. No arithmetic is permitted inside a placeholder. A model that wants to say “twice” must cite a ratio fact; a model that wants “about ₹320” must cite the exact fact and drop the hedge.</p>
+
+<h3>Validation of the rationale</h3>
+<table>
+  <thead><tr><th style="width:26%">Check</th><th style="width:44%">Rule</th><th style="width:30%">On failure</th></tr></thead>
+  <tbody>
+    <tr><td>Unknown slot</td><td>Every placeholder must reference a fact in the run’s fact table.</td><td>Reject; regenerate once.</td></tr>
+    <tr><td>Raw numerals</td><td>After removing placeholders, no digit characters are allowed except inside allowed rule IDs and dates returned as facts.</td><td>Reject; regenerate once.</td></tr>
+    <tr><td>Spelled quantities</td><td>Number words adjacent to a currency or unit (“forty thousand rupees”, “two thousand units”) are rejected.</td><td>Reject; regenerate once.</td></tr>
+    <tr><td>Verdict fidelity</td><td>The rationale may not assert a decision; decision words are limited to the template block.</td><td>Reject; template fallback.</td></tr>
+    <tr><td>Polarity</td><td>If all cited net facts are negative, optimistic words (“gain”, “improves”, “headroom”) fail a soft check.</td><td>Regenerate with a polarity reminder; then fallback.</td></tr>
+    <tr><td>Length</td><td>Maximum 120 words.</td><td>Truncate at sentence boundary; log.</td></tr>
+    <tr><td>Citations</td><td>At least one step ID must be cited when the rationale makes a causal claim.</td><td>Reject; generic template rationale.</td></tr>
+  </tbody>
+</table>
+<p>After a second failure, the renderer uses a pre-written rationale for the intent, populated with the same slots. The answer still ships, still auditable, and the validation failure is logged as a model-quality incident. The product degrades in prose quality, never in numerical integrity.</p>
+
+<h2>4.7 Failure modes and fallbacks</h2>
+<table>
+  <thead><tr><th style="width:26%">Condition</th><th style="width:38%">Behaviour</th><th style="width:36%">What the user sees</th></tr></thead>
+  <tbody>
+    <tr><td>Low planner confidence</td><td>No tool call; one clarification with suggested interpretations.</td><td>“I can run this as a special-order analysis or a product-mix analysis. Which fits?”</td></tr>
+    <tr><td>Unsupported intent</td><td>Capability response listing supported analyses and the nearest supported framing.</td><td>“I can’t build a channel-mix model yet. I can compare contribution by product under a capacity constraint.”</td></tr>
+    <tr><td>Missing mandatory data</td><td>Stop; remediation card with the exact missing fields and upload template.</td><td>“Actual material quantities are missing for PLT-02. Upload the usage file or connect the subledger.”</td></tr>
+    <tr><td>Blocking quality gate</td><td>Stop; list failed gates, affected accounts by amount, and links to fix tags.</td><td>“2.4% of cost is untagged. Tag these six accounts to continue.”</td></tr>
+    <tr><td>Ambiguous dimension</td><td>Return candidates with IDs; no fuzzy execution.</td><td>“Two products match ‘custom motor’. Select one.”</td></tr>
+    <tr><td>Capacity conflict</td><td>Warn; require override with reason before execution.</td><td>“You said idle capacity, but September utilization was 98%. Override or change the assumption.”</td></tr>
+    <tr><td>Engine domain error</td><td>Structured error with the violated pre-condition and a fix.</td><td>“Contribution per unit is negative; a break-even volume does not exist. Check price and variable cost.”</td></tr>
+    <tr><td>Provenance validation failure</td><td>Template fallback; incident logged with the raw rationale.</td><td>Complete answer with template prose and a trace; no mention of an internal validator.</td></tr>
+    <tr><td>Model timeout or outage</td><td>Retry once; then switch to workflow lane and tables-only response.</td><td>“Narrative is unavailable. The analysis below is complete and sourced.”</td></tr>
+    <tr><td>Prompt injection in data</td><td>Text treated as data; no tool call, no policy change; incident flagged.</td><td>Normal answer; the malicious string is visible only in the source record.</td></tr>
+  </tbody>
+</table>
+
+<h2>4.8 Prompt and model governance</h2>
+<ul>
+  <li>Prompts live in the repository as versioned files. Their hash is stored in every run. A prompt change requires the planner eval subset to pass and a domain review.</li>
+  <li>Model ID, provider, temperature (0), top-p (1), and token limits are pinned per run. A fallback model is allowed only if it passes the same eval suite; the fallback is recorded.</li>
+  <li>No customer data appears in prompt templates or few-shot examples. Examples use synthetic accounts and amounts.</li>
+  <li>Tool descriptions are treated as code: reviewed, tested for ambiguity, and versioned with the tool.</li>
+  <li>A red-team suite runs on every prompt or model change: instruction override, invented account, “just estimate it”, arithmetic request, unit conversion, and a ledger row containing an instruction.</li>
+</ul>
+
+<!-- ============================== 5 ============================== -->
+<h1><span class="num">5</span>Cost data layer</h1>
+
+<p>The data layer is where projects of this kind fail. The intelligence is worthless on untagged data, so the registry and the gates are the first deliverable, not an afterthought. Two rules govern the design: every fact is dimensional and every classification is versioned. A third rule governs behaviour: the system would rather refuse an analysis than silently infer a fixed/variable split.</p>
+
+<h2>5.1 Principles</h2>
+<ul>
+  <li><strong>Registry first.</strong> No analysis runs against an account whose behaviour and direct/indirect status are unknown, unless the analysis does not depend on that classification and the omission is disclosed.</li>
+  <li><strong>One canonical fact shape.</strong> Amounts, quantities, prices, hours, and volumes are separate typed facts, not strings in a spreadsheet column.</li>
+  <li><strong>Immutable snapshots.</strong> Ingestion creates a new snapshot; it never edits a prior one. Runs pin a snapshot.</li>
+  <li><strong>No silent coercion.</strong> Unparseable rows fail the load with row-level errors. Unknown dimension members go to a mapping queue.</li>
+  <li><strong>Weighted quality.</strong> Coverage is measured by cost amount, not by account count. A single untagged account holding 8% of cost is a blocking problem even if 98% of accounts are tagged.</li>
+</ul>
+
+<h2>5.2 Dimensional model</h2>
+<table>
+  <thead><tr><th style="width:18%">Dimension</th><th style="width:24%">Grain</th><th style="width:26%">Key attributes</th><th style="width:32%">Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>dim_entity</code></td><td>Legal entity</td><td>ID, name, currency, country, parent</td><td>Phase 1 supports one functional currency per entity; no translation.</td></tr>
+    <tr><td><code>dim_plant</code></td><td>Manufacturing or service location</td><td>ID, entity, name, capacity, calendar</td><td>Capacity used for utilization and volume-variance checks.</td></tr>
+    <tr><td><code>dim_product</code></td><td>Product or product family</td><td>ID, name, family, UOM, standard-cost version</td><td>Customer dimension arrives in Phase 2.</td></tr>
+    <tr><td><code>dim_period</code></td><td>Fiscal month</td><td>ID, year, period number, start, end, status</td><td>Facts are period-keyed; timestamps are metadata only.</td></tr>
+    <tr><td><code>dim_account</code></td><td>Account × plant (optional override)</td><td>Code, name, statement, type, behavior, direct/indirect, controllability</td><td>Base classification plus plant-specific overrides; SCD2 versioned.</td></tr>
+    <tr><td><code>dim_cost_center</code></td><td>Responsibility center</td><td>ID, plant, manager, controllability scope</td><td>Used for accountability and exception routing.</td></tr>
+    <tr><td><code>dim_activity</code> (P2)</td><td>Activity</td><td>ID, pool, driver, capacity</td><td>ABC and TDABC.</td></tr>
+    <tr><td><code>dim_customer</code> (P2)</td><td>Customer or segment</td><td>ID, segment, channel, region</td><td>Customer profitability.</td></tr>
+  </tbody>
+</table>
+
+<h2>5.3 Core tables</h2>
+<table>
+  <thead><tr><th style="width:24%">Table</th><th style="width:52%">Key columns</th><th style="width:24%">Used by</th></tr></thead>
+  <tbody>
+    <tr><td><code>fact_gl_actual</code></td><td><code>snapshot_id, period_id, entity_id, plant_id, account_id, cost_center_id, amount, currency, source_doc_id, load_id</code></td><td>Flux, registry coverage, budget-vs-actual, bridges.</td></tr>
+    <tr><td><code>fact_standard_cost</code></td><td><code>period_id, product_id, plant_id, version, material_cost, labor_cost, variable_oh, fixed_oh, unit_cost, uom</code></td><td>Standard-cost variances, absorption costing, CVP.</td></tr>
+    <tr><td><code>fact_standard_usage</code></td><td><code>period_id, product_id, plant_id, material_qty_per_unit, labor_hours_per_unit, machine_hours_per_unit, uom</code></td><td>SQ and SH calculation; flexible budget.</td></tr>
+    <tr><td><code>fact_actual_usage</code></td><td><code>period_id, product_id, plant_id, material_qty_purchased, material_qty_used, actual_price, actual_labor_hours, actual_rate, actual_machine_hours</code></td><td>Price/usage/rate/efficiency decomposition.</td></tr>
+    <tr><td><code>fact_volume</code></td><td><code>period_id, product_id, plant_id, produced_units, sold_units, beg_fg_units, end_fg_units, beg_rm_units, end_rm_units</code></td><td>Volume variances, flexible budget, inventory bridge.</td></tr>
+    <tr><td><code>fact_budget</code></td><td><code>period_id, version, entity_id, plant_id, account_id, amount, volume_basis, currency</code></td><td>Flux, flexible budget, monitoring.</td></tr>
+    <tr><td><code>fact_inventory_balance</code></td><td><code>period_id, product_id, plant_id, units, standard_cost, fixed_oh_rate</code></td><td>Costing-method bridge, absorption profit.</td></tr>
+    <tr><td><code>fact_actual_price_volume</code></td><td><code>period_id, product_id, plant_id, actual_price, actual_units, actual_variable_cost_per_unit</code></td><td>Sales and contribution variances.</td></tr>
+    <tr><td><code>registry_account_version</code></td><td><code>account_id, plant_id, version, behavior, behavior_method, direct_indirect, controllability, approved_by, valid_from, valid_to</code></td><td>Every classification-dependent analysis.</td></tr>
+    <tr><td><code>snapshot</code></td><td><code>snapshot_id, tenant_id, created_at, manifest_hash, registry_version, schema_version, row_counts, status</code></td><td>Pinning and re-performance.</td></tr>
+    <tr><td><code>load</code>, <code>load_error</code></td><td><code>load_id, snapshot_id, file, gate_results, error_count, status</code></td><td>Ingestion audit.</td></tr>
+    <tr><td><code>run</code>, <code>run_step</code>, <code>audit_event</code></td><td>See Section 7.</td><td>Answer trace and re-performance.</td></tr>
+    <tr><td><code>account_mapping</code> (P2)</td><td><code>source_system, source_account, target_account, status, approved_by, contract_version</code></td><td>ERP connectors.</td></tr>
+  </tbody>
+</table>
+
+<h2>5.4 Account registry</h2>
+<p>The registry is a versioned classification of every account, with optional plant-level overrides. It answers four questions the engine cannot proceed without: is the account fixed, variable, or semi-variable; is it direct or indirect; is it controllable by the manager being evaluated; and is it manufacturing or period cost.</p>
+<table>
+  <thead><tr><th style="width:16%">Behaviour</th><th style="width:30%">Definition</th><th style="width:30%">Engine use</th><th style="width:24%">Estimation method</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Fixed</strong></td><td>Does not change with volume inside the relevant range.</td><td>Period cost in contribution margin; spending variance; shutdown analysis.</td><td>User classification; contract or budget evidence.</td></tr>
+    <tr><td><strong>Variable</strong></td><td>Changes proportionally with volume or driver.</td><td>Contribution margin; CVP; differential cost; flexible budget.</td><td>Standard cost card; user classification; high-low check.</td></tr>
+    <tr><td><strong>Semi-variable</strong></td><td>Fixed base plus variable component.</td><td>CVP, flexible budget, break-even; split stored explicitly.</td><td>User-specified split or high-low over at least six periods; regression in Phase 2.</td></tr>
+    <tr><td><strong>Step-fixed</strong> (P2)</td><td>Fixed within a capacity band, jumps at thresholds.</td><td>Capacity planning, relevant range warnings.</td><td>Band table supplied by the client.</td></tr>
+  </tbody>
+</table>
+<p><strong>Relationship to standard cost cards.</strong> The registry classifies GL accounts and period costs. Standard cost cards carry the per-unit material, labour, and overhead standards used for product costing and standard-cost variances. The engine must not add both: product-level variable cost comes from the standard cost card; period fixed cost comes from the registry and GL. Where a card is missing, the engine blocks the product-level analysis and names the missing card; it does not fall back to account averages.</p>
+
+<h3>Registry lifecycle</h3>
+<ol>
+  <li><strong>Import</strong> the chart of accounts with statement, type, and cost-center mapping.</li>
+  <li><strong>Suggest</strong> behaviour and direct/indirect using deterministic rules first (account type, name patterns, standard-cost mapping), then a model suggestion as a secondary hint.</li>
+  <li><strong>Review</strong> in a bulk grid sorted by amount, so the analyst spends time on material accounts. Every suggestion shows its evidence.</li>
+  <li><strong>Approve</strong> with a named approver and timestamp. Approval is per version, not per row.</li>
+  <li><strong>Version</strong> any change as a new registry version with a diff and reason. Runs pin the version they used.</li>
+</ol>
+<p>Weighted coverage is computed as tagged cost amount divided by total cost amount for the analysis scope. The pilot target is 99.9% or better; below 99% is blocking, and any single untagged account above 2% of scope is blocking regardless of the total.</p>
+
+<h2>5.5 Ingestion pipeline</h2>
+<ol>
+  <li><strong>Receive.</strong> Upload or connector extract; allowlist XLSX and CSV; 100 MB per file; macro-free; virus scan; zip-bomb protection.</li>
+  <li><strong>Stage.</strong> Load raw values as strings into staging tables with file, sheet, row, and column references.</li>
+  <li><strong>Map.</strong> Resolve columns to the canonical template; unresolved required columns fail the load with a mapping error.</li>
+  <li><strong>Type.</strong> Parse amounts, quantities, prices, hours, dates, and periods with explicit formats. No locale guessing beyond the declared tenant locale.</li>
+  <li><strong>Resolve.</strong> Match dimension members exactly; unknowns go to a mapping queue and the load reports them.</li>
+  <li><strong>Validate registry.</strong> Every cost account in scope must have a behaviour and direct/indirect tag, or an approved override.</li>
+  <li><strong>Run gates.</strong> G1–G12 below. Blocking failures stop the canonical load.</li>
+  <li><strong>Reconcile.</strong> Compare loaded totals to uploaded control totals and to the prior period where applicable.</li>
+  <li><strong>Load canonically.</strong> Write typed facts in one transaction per load.</li>
+  <li><strong>Freeze.</strong> Build Parquet files, compute hashes, write the manifest, and register the snapshot.</li>
+  <li><strong>Report.</strong> Show a quality report with pass/warn/block per gate, affected amounts, and remediation links.</li>
+</ol>
+
+<h2>5.6 Quality gates</h2>
+<table>
+  <thead><tr><th style="width:6%">Gate</th><th style="width:36%">Check</th><th style="width:14%">Severity</th><th style="width:44%">Remediation</th></tr></thead>
+  <tbody>
+    <tr><td><strong>G1</strong></td><td>File and column schema matches the template version.</td><td><span class="tag block">Block</span></td><td>Download the current template; remap columns.</td></tr>
+    <tr><td><strong>G2</strong></td><td>Referential integrity: every fact resolves to a dimension member.</td><td><span class="tag block">Block</span></td><td>Map unknown members; add missing dimensions.</td></tr>
+    <tr><td><strong>G3</strong></td><td>Period completeness: all expected periods and plants present.</td><td><span class="tag block">Block</span></td><td>Upload the missing period or exclude the plant explicitly.</td></tr>
+    <tr><td><strong>G4</strong></td><td>No duplicate load for the same file hash and period.</td><td><span class="tag block">Block</span></td><td>Use the existing snapshot or load a corrected file with a new version.</td></tr>
+    <tr><td><strong>G5</strong></td><td>Control-total reconciliation within ₹1 or 0.01% of the control total, whichever is larger; the tolerance is configurable per contract.</td><td><span class="tag block">Block</span></td><td>Review rejected rows and control totals; re-extract.</td></tr>
+    <tr><td><strong>G6</strong></td><td>Weighted account-tag coverage at or above 99%; no single untagged account above 2% of scope.</td><td><span class="tag block">Block</span></td><td>Tag accounts in the registry; approve overrides.</td></tr>
+    <tr><td><strong>G7</strong></td><td>Unit of measure present and consistent for every quantity, price, and rate.</td><td><span class="tag block">Block</span></td><td>Supply UOM; fix conflicting conversions.</td></tr>
+    <tr><td><strong>G8</strong></td><td>Single functional currency per entity; no mixed-currency facts in scope.</td><td><span class="tag block">Block</span></td><td>Filter to one currency or split the entity; translation is out of scope.</td></tr>
+    <tr><td><strong>G9</strong></td><td>Sign convention: costs positive, credits negative, revenue positive; reversals flagged.</td><td><span class="tag warn">Warn</span></td><td>Review the sign report; confirm or correct.</td></tr>
+    <tr><td><strong>G10</strong></td><td>Outliers: period-over-period change above 3× or z-score above 4.</td><td><span class="tag warn">Warn</span></td><td>Investigate before relying on the variance; never block solely on an outlier.</td></tr>
+    <tr><td><strong>G11</strong></td><td>Standard cost card present for every product in scope, with all components.</td><td><span class="tag block">Block</span></td><td>Load the missing card; exclude the product with disclosure.</td></tr>
+    <tr><td><strong>G12</strong></td><td>Standard usage and actual usage present for the products being decomposed.</td><td><span class="tag block">Block</span></td><td>Load usage data or run the total-variance-only view with disclosure.</td></tr>
+  </tbody>
+</table>
+
+<h2>5.7 Snapshot semantics</h2>
+<pre>{
+  "snapshot_id": "snap_7f3c9a…",
+  "tenant_id": "tnt_pilot_01",
+  "created_at": "2026-11-02T09:14:00Z",
+  "registry_version": 7,
+  "schema_version": "1.3.0",
+  "transform_version": "1.1.0",
+  "files": [
+    {"name": "fact_gl_actual.parquet", "sha256": "…", "rows": 184203},
+    {"name": "fact_standard_cost.parquet", "sha256": "…", "rows": 640}
+  ],
+  "control_totals": {"gl_cost_inr": "48210344.00", "loaded_inr": "48210344.00"},
+  "quality": {"blocking": 0, "warnings": 2, "coverage_weighted": 0.9974}
+}</pre>
+<p>The manifest hash is the snapshot ID’s source of truth. Runs pin the snapshot ID and store the manifest hash. Re-performance verifies both. A new ingestion always creates a new snapshot; corrections are new snapshots with a lineage note, never in-place edits.</p>
+
+<h2>5.8 The variance input problem</h2>
+<p>Most GL extracts carry account amounts, not the actual quantities, prices, and hours needed for a price/usage decomposition. The product handles this in three explicit levels rather than estimating:</p>
+<table>
+  <thead><tr><th style="width:24%">Level</th><th style="width:38%">Inputs available</th><th style="width:38%">Output and disclosure</th></tr></thead>
+  <tbody>
+    <tr><td><strong>A. Standard-cost decomposition</strong></td><td>Standards, actual quantities/price/hours, actual output.</td><td>Full MPV/MUV, LRV/LEV, overhead spending/efficiency. No disclosure beyond basis.</td></tr>
+    <tr><td><strong>B. Account flux</strong></td><td>GL actuals, budget, prior period.</td><td>Budget-vs-actual and period-over-period movement with drill-down. No fabricated price/usage split; residual labelled “unexplained”.</td></tr>
+    <tr><td><strong>C. Flexible budget</strong></td><td>GL actuals, budget, actual volume, variable-cost standards.</td><td>Volume effect isolated from spending/price/efficiency effects. Mix variance only when product mix data is available.</td></tr>
+  </tbody>
+</table>
+<p>If a user asks for a decomposition at level B, the answer states which components cannot be computed and offers the upload path. The engine may still compute the total variance; it must label the decomposition unavailable. This is the difference between an honest partial answer and a confident fiction.</p>
+
+<h2>5.9 Phase 2 schema extensions</h2>
+<p>The Phase 1 schema leaves room for the Phase 2 modules without renaming core facts. The additions are additive tables plus two new dimension types.</p>
+<table>
+  <thead><tr><th style="width:24%">Table</th><th style="width:50%">Purpose</th><th style="width:26%">Module</th></tr></thead>
+  <tbody>
+    <tr><td><code>dim_activity</code>, <code>fact_cost_pool</code></td><td>Activity definitions, pool costs, capacity, and period.</td><td>ABC / TDABC (M7)</td></tr>
+    <tr><td><code>dim_driver</code>, <code>fact_driver_event</code></td><td>Driver definitions and event-level consumption (setups, inspections, orders, movements).</td><td>ABC / TDABC (M7)</td></tr>
+    <tr><td><code>fact_allocation</code></td><td>Pool-to-product/customer allocation with method, rate, driver quantity, and unused capacity.</td><td>ABC (M7)</td></tr>
+    <tr><td><code>dim_customer</code>, <code>fact_customer_activity</code></td><td>Customer-level driver consumption and profitability.</td><td>ABC (M7)</td></tr>
+    <tr><td><code>budget_version</code>, <code>budget_node</code>, <code>scenario_overlay</code></td><td>Versioned budget chain and scenario diffs.</td><td>Budgeting (M9)</td></tr>
+    <tr><td><code>kpi_definition</code>, <code>scorecard</code>, <code>scorecard_result</code></td><td>Metric definitions, weights, and computed results.</td><td>Performance (M10)</td></tr>
+    <tr><td><code>alert_rule</code>, <code>alert_instance</code></td><td>Natural-language rule compiled to engine queries; ranked alerts.</td><td>Monitoring (M8)</td></tr>
+    <tr><td><code>connector_contract</code>, <code>mapping_version</code></td><td>Source system, control totals, approved account mappings, contract version.</td><td>Connectors (M6)</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================== 6 ============================== -->
+<h1><span class="num">6</span>Deterministic engine</h1>
+
+<p>The engine is the authority. It is a library of pure functions with no database access, no network calls, and no model calls. It receives typed inputs, applies a registered rule, and returns a value plus the exact steps that produced it. If the engine cannot compute something under the stated policy, it raises a domain error with a remediation code. It never fills a gap with an estimate.</p>
+
+<h2>6.1 Calculation result object</h2>
+<pre>@dataclass(frozen=True)
+class CalcStep:
+    step_id: str                  # s1, s2, … stable within a run
+    label: str                    # "Incremental revenue"
+    rule_id: str                  # "DA-SO-001"
+    rule_version: str             # "1.0.0"
+    formula: str                  # "order_units × order_price"
+    inputs: dict[str, Decimal | str]
+    value: Decimal
+    unit: str                     # "INR", "INR/unit", "units", "hours"
+    source_refs: list[str]        # fact row IDs or aggregate query IDs
+    note: str | None = None
+
+@dataclass(frozen=True)
+class CalcResult:
+    value: Decimal
+    unit: str
+    favorable: bool | None        # true = favorable, false = adverse, none = neutral
+    verdict: str | None           # accept / reject / investigate
+    steps: list[CalcStep]
+    facts: list[Fact]
+    assumptions: list[AssumptionRef]
+    warnings: list[Warning]
+    sensitivity: list[SensitivityPoint]</pre>
+<p><code>Fact</code> is the render-facing projection of a step: a stable ID, a human label, a formatted value, a unit, and the step that produced it. The renderer never derives a fact; it only formats one.</p>
+
+<h2>6.2 Module layout</h2>
+<pre>packages/engine/costpilot_engine/
+  money.py            Decimal construction, currency, rounding policy
+  units.py            UOM registry, explicit conversions, dimension checks
+  trace.py            CalcStep, CalcResult, Fact, assumption and warning models
+  rules/
+    registry.py       rule registration, versions, source citations
+    catalog.py        human-readable rulebook generated from the registry
+  variance/
+    material.py       MPV, MUV, MCV, purchase-basis supplement
+    labor.py          LRV, LEV, LCV
+    overhead.py       variable spending/efficiency; fixed spending/volume
+    flexible_budget.py
+    flux.py           account-level budget/prior-period movement
+  decisions/
+    differential.py   relevant-cost primitives
+    make_or_buy.py
+    special_order.py
+    add_or_drop.py
+    sell_or_process.py
+    shutdown.py
+    product_mix.py
+    cvp.py
+  costing/
+    variable.py       contribution-format income statement
+    absorption.py     gross-profit-format income statement
+    bridge.py         fixed-overhead-in-inventory reconciliation
+  abc/                Phase 2
+    pools.py  drivers.py  traditional.py  tdabc.py  profitability.py
+  budgets/            Phase 2
+    chain.py  cash.py  scenarios.py
+  performance/        Phase 2
+    roi.py  residual_income.py  scorecard.py
+  validation/
+    identities.py  units.py  coverage.py</pre>
+
+<h2>6.3 Numeric, unit, and rounding policy</h2>
+<ul>
+  <li><strong>Decimal only.</strong> Construct from strings. Floats are banned in the engine package by lint. Division uses an explicit context with at least 28 digits.</li>
+  <li><strong>No rounding mid-calculation.</strong> Steps carry full precision. Rounding happens once, at rendering: currency 2 decimals, rates 4, quantities 4, percentages 2. A displayed total may differ from the sum of displayed components by ₹0.01; the trace shows a rounding-adjustment line and the full-precision values.</li>
+  <li><strong>Units are dimensional.</strong> Amounts are currency; quantities are UOM; rates are currency per UOM. The engine refuses to add incompatible units. Conversions happen only through the explicit UOM registry, never implicitly.</li>
+  <li><strong>Currency is per entity.</strong> Phase 1 rejects mixed-currency scopes. There is no FX translation and no display-currency conversion.</li>
+  <li><strong>Sign convention.</strong> Internally, a variance is positive when favorable. API results carry a signed value and a <code>favorable</code> boolean. The UI prints the magnitude with an F/A label, never a negative number for a variance. Actual losses use parentheses.</li>
+  <li><strong>Deterministic order.</strong> Steps are ordered by dependency, then by rule ID. No unordered iteration or locale-dependent sorting affects numbers.</li>
+</ul>
+
+<h2>6.4 Variance rulebook</h2>
+<p>Symbols: AQ = actual quantity, AP = actual price, SQ = standard quantity allowed for actual output, SP = standard price, AH = actual hours, AR = actual rate, SH = standard hours allowed for actual output. Every formula below produces a favorable-positive value; the display shows magnitude plus F/A.</p>
+<table>
+  <thead><tr><th style="width:19%">Variance</th><th style="width:37%">Formula</th><th style="width:20%">Favorable when</th><th style="width:24%">Note</th></tr></thead>
+  <tbody>
+    <tr><td>Material price (MPV)</td><td><span class="formula">AQ<sub>used</sub> × (SP − AP)</span></td><td>AP &lt; SP</td><td>Usage basis for tie-out to MCV. Purchase-basis price variance reported separately when purchased ≠ used.</td></tr>
+    <tr><td>Material usage (MUV)</td><td><span class="formula">SP × (SQ − AQ<sub>used</sub>)</span></td><td>AQ &lt; SQ</td><td>SQ = actual output × standard qty per unit.</td></tr>
+    <tr><td>Material cost (MCV)</td><td><span class="formula">MPV + MUV</span></td><td>—</td><td>Identity checked to ₹0.01.</td></tr>
+    <tr><td>Labour rate (LRV)</td><td><span class="formula">AH × (SR − AR)</span></td><td>AR &lt; SR</td><td>Overtime premium policy is explicit in the rule.</td></tr>
+    <tr><td>Labour efficiency (LEV)</td><td><span class="formula">SR × (SH − AH)</span></td><td>AH &lt; SH</td><td>SH = actual output × standard hours per unit.</td></tr>
+    <tr><td>Labour cost (LCV)</td><td><span class="formula">LRV + LEV</span></td><td>—</td><td>Identity checked.</td></tr>
+    <tr><td>Variable overhead spending</td><td><span class="formula">Actual VOH − (AH × SR<sub>v</sub>)</span></td><td>Actual &lt; applied</td><td>Rate is the variable overhead rate per hour.</td></tr>
+    <tr><td>Variable overhead efficiency</td><td><span class="formula">SR<sub>v</sub> × (AH − SH)</span></td><td>AH &lt; SH</td><td>Only meaningful when overhead is driven by hours.</td></tr>
+    <tr><td>Fixed overhead spending</td><td><span class="formula">Budgeted FOH − Actual FOH</span></td><td>Actual &lt; budget</td><td>Controllable in the short run.</td></tr>
+    <tr><td>Fixed overhead volume</td><td><span class="formula">Applied FOH − Budgeted FOH</span>, where applied = SR<sub>f</sub> × SH</td><td>Applied &gt; budget</td><td>Capacity utilization; not a spending failure.</td></tr>
+    <tr><td>Total overhead</td><td><span class="formula">Applied − Actual</span></td><td>Applied &gt; actual</td><td>Equals spending + volume for fixed; spending + efficiency for variable.</td></tr>
+    <tr><td>Sales price</td><td><span class="formula">Actual revenue − (Actual units × Budget price)</span></td><td>Actual price &gt; budget</td><td>Revenue sign convention; positive is favorable.</td></tr>
+    <tr><td>Sales volume</td><td><span class="formula">(Actual units − Budget units) × Budget CM per unit</span></td><td>Actual &gt; budget</td><td>Contribution basis, not revenue basis.</td></tr>
+  </tbody>
+</table>
+
+<h3>Flexible-budget restatement</h3>
+<p>The flexible budget is the default comparison for performance. It restates revenue and variable costs at actual volume, leaves fixed costs at budget, and separates the volume effect from the spending effect. The identity is <strong>static-budget variance = flexible-budget variance + sales-volume variance</strong>.</p>
+<table>
+  <thead><tr><th style="width:34%">Line</th><th class="num" style="width:16%">Static budget</th><th class="num" style="width:16%">Flexed at 11,000</th><th class="num" style="width:16%">Actual</th><th class="num" style="width:18%">Flexible variance</th></tr></thead>
+  <tbody>
+    <tr><td>Units</td><td class="num">10,000</td><td class="num">11,000</td><td class="num">11,000</td><td class="num">—</td></tr>
+    <tr><td>Revenue at ₹500 / ₹490</td><td class="num">5,000,000</td><td class="num">5,500,000</td><td class="num">5,390,000</td><td class="num"><span class="abadge">110,000 A</span></td></tr>
+    <tr><td>Variable cost at ₹320 / ₹325</td><td class="num">3,200,000</td><td class="num">3,520,000</td><td class="num">3,575,000</td><td class="num"><span class="abadge">55,000 A</span></td></tr>
+    <tr><td>Contribution margin</td><td class="num">1,800,000</td><td class="num">1,980,000</td><td class="num">1,815,000</td><td class="num"><span class="abadge">165,000 A</span></td></tr>
+    <tr><td>Fixed cost</td><td class="num">900,000</td><td class="num">900,000</td><td class="num">920,000</td><td class="num"><span class="abadge">20,000 A</span></td></tr>
+    <tr><td><strong>Operating income</strong></td><td class="num"><strong>900,000</strong></td><td class="num"><strong>1,080,000</strong></td><td class="num"><strong>895,000</strong></td><td class="num"><span class="abadge">185,000 A</span></td></tr>
+  </tbody>
+</table>
+<p>The static-budget variance is ₹5,000 adverse. The sales-volume variance is ₹180,000 favorable (1,000 units × ₹180 budgeted contribution). The flexible-budget variance is ₹185,000 adverse, decomposed into price ₹110,000, variable cost ₹55,000, and fixed spending ₹20,000. Without the flex, a manager would be blamed for a ₹5,000 miss while the underlying spending deterioration is 37 times larger.</p>
+
+<h3>Material decomposition example</h3>
+<p>Standard: 2 kg per unit at ₹50. Actual output: 10,000 units. Actual usage: 20,500 kg at ₹52. MPV = 20,500 × (50 − 52) = ₹41,000 adverse. MUV = 50 × (20,000 − 20,500) = ₹25,000 adverse. MCV = ₹66,000 adverse. If 21,000 kg were purchased, a purchase-basis price variance of ₹42,000 adverse is reported separately, with the ₹1,000 difference held in the 500 kg of inventory at standard; the usage-basis MCV remains unchanged.</p>
+
+<h2>6.5 Short-run decision rulebook</h2>
+<p>Every workflow applies the same relevant-cost primitives: include future costs that differ between alternatives; exclude sunk costs; exclude allocated common fixed costs unless they are avoidable; include opportunity cost when a scarce resource is redeployed. The engine produces a differential table, a verdict, conditions, and a qualitative checklist. The checklist does not change the numbers; it can change the verdict from unconditional to conditional.</p>
+<table>
+  <thead><tr><th style="width:15%">Decision</th><th style="width:33%">Core comparison</th><th style="width:28%">Must include / exclude</th><th style="width:24%">Guardrail</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Make or buy</strong></td><td>Avoidable cost of making versus purchase cost plus incremental fixed cost.</td><td>Include avoidable fixed, opportunity cost of freed capacity. Exclude allocated common fixed and sunk tooling.</td><td>Flag quality, supply continuity, and capacity-release assumptions. Verdict conditional if any unresolved.</td></tr>
+    <tr><td><strong>Special order</strong></td><td>Incremental revenue versus incremental variable cost, incremental fixed, and lost contribution.</td><td>Include opportunity cost if capacity is constrained. Exclude existing fixed overhead allocation.</td><td>Confirm idle capacity against utilization; flag cannibalization and price precedent.</td></tr>
+    <tr><td><strong>Add or drop</strong></td><td>Contribution margin lost versus avoidable fixed costs saved.</td><td>Include avoidable fixed savings and complementary-product effects. Exclude allocated fixed.</td><td>Explicit warning when a loss-reporting product still covers avoidable costs.</td></tr>
+    <tr><td><strong>Sell or process further</strong></td><td>Incremental revenue after further processing versus incremental processing cost.</td><td>Treat joint costs as sunk. Include incremental variable and avoidable fixed.</td><td>Flag capacity and quality constraints; no allocation of joint cost.</td></tr>
+    <tr><td><strong>Operate or shut down</strong></td><td>Contribution forgone versus avoidable fixed costs saved over the shutdown window.</td><td>Include avoidable fixed, restart costs where quantifiable. Exclude unavoidable fixed.</td><td>Window must be stated; flag workforce and customer-contract effects as qualitative.</td></tr>
+    <tr><td><strong>Product mix</strong></td><td>Rank by contribution per unit of the scarce resource.</td><td>Include the true limiting factor. Exclude fixed costs from ranking.</td><td>Single constraint only in Phase 1; flag if multiple constraints or integer indivisibilities bind.</td></tr>
+    <tr><td><strong>CVP / break-even</strong></td><td>Fixed cost divided by contribution per unit; margin of safety; target profit.</td><td>Use contribution format; state relevant range and constant-mix assumption.</td><td>No break-even when contribution per unit is zero or negative; flag mixed-product mix changes.</td></tr>
+  </tbody>
+</table>
+
+<h2>6.6 CVP and the costing-method bridge</h2>
+<table>
+  <thead><tr><th style="width:28%">Measure</th><th style="width:48%">Formula</th><th style="width:24%">Policy</th></tr></thead>
+  <tbody>
+    <tr><td>Contribution per unit</td><td><span class="formula">Price − Variable cost per unit</span></td><td>Variable cost includes variable selling if applicable.</td></tr>
+    <tr><td>Contribution margin ratio</td><td><span class="formula">Contribution ÷ Revenue</span></td><td>Use unrounded contribution and revenue.</td></tr>
+    <tr><td>Break-even units</td><td><span class="formula">Fixed cost ÷ Contribution per unit</span></td><td>Undefined when contribution ≤ 0; raise a domain error.</td></tr>
+    <tr><td>Break-even revenue</td><td><span class="formula">Fixed cost ÷ Contribution margin ratio</span></td><td>Single-product or constant-mix only.</td></tr>
+    <tr><td>Target-profit units</td><td><span class="formula">(Fixed cost + Target operating income) ÷ Contribution per unit</span></td><td>Target is pre-tax operating income.</td></tr>
+    <tr><td>Margin of safety</td><td><span class="formula">(Actual or budget sales − Break-even sales) ÷ Actual or budget sales</span></td><td>State the base used.</td></tr>
+    <tr><td>Degree of operating leverage</td><td><span class="formula">Contribution ÷ Operating income</span></td><td>Undefined at zero operating income; warn.</td></tr>
+    <tr><td>Absorption–variable profit difference</td><td><span class="formula">Change in inventory units × Fixed overhead rate per unit</span></td><td>Positive when inventory builds; reconciliation must tie to ₹0.01.</td></tr>
+    <tr><td>ROI</td><td><span class="formula">Operating income ÷ Average operating assets</span></td><td>Average of beginning and ending assets unless the client supplies a method.</td></tr>
+    <tr><td>Residual income</td><td><span class="formula">Operating income − (Required return × Average operating assets)</span></td><td>Required return is a client input, not a default.</td></tr>
+  </tbody>
+</table>
+
+<h2>6.7 Worked example: the special order</h2>
+<p>The canonical demo: 2,000 units at ₹380, variable manufacturing cost ₹300 per unit, incremental fixed cost ₹40,000, idle capacity, no cannibalization, no variable selling cost on the order. Regular price is ₹500 and regular variable selling cost is ₹20 per unit.</p>
+<table>
+  <thead><tr><th style="width:48%">Differential line</th><th class="num" style="width:18%">Per unit</th><th class="num" style="width:18%">2,000 units</th><th style="width:16%">Treatment</th></tr></thead>
+  <tbody>
+    <tr><td>Incremental revenue</td><td class="num">380.00</td><td class="num">760,000.00</td><td>Relevant</td></tr>
+    <tr><td>Variable manufacturing cost</td><td class="num">(300.00)</td><td class="num">(600,000.00)</td><td>Relevant</td></tr>
+    <tr><td><strong>Incremental contribution</strong></td><td class="num"><strong>80.00</strong></td><td class="num"><strong>160,000.00</strong></td><td>—</td></tr>
+    <tr><td>Incremental fixed cost (setup)</td><td class="num">(20.00)</td><td class="num">(40,000.00)</td><td>Relevant</td></tr>
+    <tr><td>Opportunity cost of displaced sales</td><td class="num">—</td><td class="num">0.00</td><td>Idle capacity confirmed</td></tr>
+    <tr><td>Allocated existing fixed overhead</td><td class="num">—</td><td class="num">excluded</td><td>Sunk / unavoidable</td></tr>
+    <tr><td><strong>Incremental profit</strong></td><td class="num"><strong>60.00</strong></td><td class="num"><strong>120,000.00</strong></td><td>—</td></tr>
+    <tr><td><strong>Minimum acceptable price</strong></td><td class="num"><strong>320.00</strong></td><td class="num"><strong>640,000.00</strong></td><td>Floor</td></tr>
+  </tbody>
+</table>
+<p><strong>Verdict: accept, conditionally.</strong> The conditions are: idle capacity is real for the order window; no regular sales are displaced; the price does not become a precedent for regular customers; and the order passes quality, regulatory, and working-capital checks. If idle capacity were only 1,000 units, 1,000 regular units would be displaced, the opportunity cost would be ₹180,000 (1,000 × ₹180 regular contribution), the incremental profit would turn to ₹60,000 negative, and the floor would rise to ₹410. The engine computes this sensitivity automatically and shows it as a second row on the card.</p>
+
+<h2>6.8 Phase 2 formulas</h2>
+<h3>ABC and TDABC</h3>
+<p>Pool rate = total pool cost ÷ total driver quantity. Allocated cost = pool rate × driver quantity consumed. TDABC capacity cost rate = cost of capacity supplied ÷ practical capacity; cost per transaction = rate × time per transaction; unused capacity cost = rate × (capacity − time used). Allocations must sum to the pool total within ₹0.01; unused capacity is shown as a separate line, never spread silently into products.</p>
+<p>Example: a setup pool of ₹600,000 with 1,500 setups gives ₹400 per setup. A high-volume product consuming 200 setups receives ₹80,000; a low-volume custom product consuming 1,300 receives ₹520,000. A traditional machine-hour allocation that gives the high-volume product 80% of the pool would assign ₹480,000 and ₹120,000 — reversing the economics. The report always shows traditional and ABC side by side; the difference is the finding, not a hidden adjustment.</p>
+
+<h3>Budget chain</h3>
+<p>Production units = sales units + desired ending finished goods − beginning finished goods. Material purchases = production usage + desired ending raw material − beginning raw material. Labour hours = production units × standard hours per unit. Each node is a pure function with a versioned output; a scenario is an overlay diff, not a copied workbook. Example: sales 10,000 + ending 1,200 − beginning 1,000 = 10,200 units produced; at 2 kg per unit, usage is 20,400 kg; with ending 1,500 and beginning 1,200, purchases are 20,700 kg.</p>
+
+<h3>Performance measurement</h3>
+<p>ROI = operating income ÷ average operating assets; residual income = operating income − required return × average operating assets. Example: operating income ₹1,200,000 on assets ₹6,000,000 is 20% ROI. A new investment adds ₹180,000 of income on ₹1,200,000 of assets — 15%, above the 12% required return but below the division’s current 20%. The manager rejects it under ROI; residual income rises by ₹36,000. The engine shows both views on the same data and labels the conflict explicitly, without declaring which manager behaviour is “right”.</p>
+
+<h2>6.9 Edge cases and policy decisions</h2>
+<table>
+  <thead><tr><th style="width:30%">Case</th><th style="width:44%">Engine behaviour</th><th style="width:26%">User-facing consequence</th></tr></thead>
+  <tbody>
+    <tr><td>Zero or negative volume</td><td>Domain error for per-unit and break-even rules; total-cost views may still run.</td><td>Explain the precondition and offer a total view.</td></tr>
+    <tr><td>Contribution ≤ 0</td><td>Break-even undefined; shutdown analysis still available.</td><td>“No break-even volume exists at this price.”</td></tr>
+    <tr><td>Missing standard cost card</td><td>Block product-level variance and CVP; name the product and card.</td><td>Upload the card or exclude the product explicitly.</td></tr>
+    <tr><td>Purchase quantity ≠ usage</td><td>Usage-basis MPV for tie-out; purchase-basis price variance as a supplement; inventory effect shown.</td><td>Two clearly labelled price variances, not one ambiguous number.</td></tr>
+    <tr><td>Rounding residual</td><td>Full precision internally; display rounding adjustment when components do not sum exactly.</td><td>Tables tie; the adjustment is visible.</td></tr>
+    <tr><td>Mixed currency scope</td><td>Block; no FX translation in Phase 1.</td><td>Filter to one entity/currency or defer.</td></tr>
+    <tr><td>Unit mismatch</td><td>Block; require explicit conversion through the UOM registry.</td><td>Fix the input or the UOM mapping.</td></tr>
+    <tr><td>Credits and reversals</td><td>Preserve sign; flag reversal pairs; do not net silently across periods.</td><td>Sign report on ingestion; drill-down shows the pair.</td></tr>
+    <tr><td>Volume outside relevant range</td><td>Compute but warn; do not extrapolate fixed costs or step costs.</td><td>Warning chip with the observed range.</td></tr>
+    <tr><td>Multiple scarce resources</td><td>Ranking is invalid; raise a domain warning and suggest linear programming in Phase 3.</td><td>“Two constraints bind; contribution-per-unit ranking is not sufficient.”</td></tr>
+    <tr><td>Joint costs</td><td>Sunk for sell-or-process-further; excluded from the incremental comparison.</td><td>Joint cost shown as memo only.</td></tr>
+    <tr><td>Idle capacity claim</td><td>Cross-check against utilization; require override if above 95%.</td><td>Assumption warning with evidence.</td></tr>
+    <tr><td>Cannibalization</td><td>No automatic estimate; user supplies displaced units or confirms none.</td><td>Conditional verdict until confirmed.</td></tr>
+    <tr><td>Depreciation and non-cash costs</td><td>Excluded from short-run cash differential unless the user explicitly includes a cash-equivalent charge.</td><td>Policy note on the differential table.</td></tr>
+  </tbody>
+</table>
+<!-- ============================== 7 ============================== -->
+<h1><span class="num">7</span>Audit and explainability</h1>
+
+<p>The audit trail is not a log file appended after the fact. It is the product’s evidence layer, built at the same time as the calculation and sealed before the answer is shown. A controller should be able to take any response, open the trace, and re-perform the calculation by hand or with the re-performance tool. If that takes more than a few minutes, the audit design has failed.</p>
+
+<h2>7.1 The run record</h2>
+<table>
+  <thead><tr><th style="width:24%">Field group</th><th style="width:76%">Contents</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Identity</strong></td><td>Run ID, tenant, user, session, origin (user, monitor, re-performance), parent run, timestamps.</td></tr>
+    <tr><td><strong>Question and plan</strong></td><td>Original question, normalized question, intent, tool and version, plan version, planner confidence, raw planner output, clarification asked.</td></tr>
+    <tr><td><strong>Confirmation</strong></td><td>Whether confirmation was required, confirmed by, timestamp, model-proposed values, user edits, and reasons for overrides.</td></tr>
+    <tr><td><strong>Pins</strong></td><td>Snapshot ID and manifest hash, registry version, engine semver, rulebook version, prompt version, model ID and provider, tool-registry version.</td></tr>
+    <tr><td><strong>Inputs</strong></td><td>Resolved arguments, dimension labels, assumptions with source and confirmation, data-quality gate results at run time.</td></tr>
+    <tr><td><strong>Calculation</strong></td><td>Every step: rule ID and version, formula, inputs, value, unit, source refs, warnings, sensitivity points.</td></tr>
+    <tr><td><strong>Facts and response</strong></td><td>Fact table, verdict, deterministic template version, raw rationale with placeholders, rendered rationale, table payloads, export references.</td></tr>
+    <tr><td><strong>Validation</strong></td><td>Schema, identity, unit, basis, coverage, assumption, provenance, and numeric-claim results; warnings; fallback used.</td></tr>
+    <tr><td><strong>Integrity</strong></td><td>Input hash, output hash, previous event hash, event hash, sealing timestamp.</td></tr>
+    <tr><td><strong>Operations</strong></td><td>Latency by stage, token counts, model cost, cache hits, retries, error codes.</td></tr>
+  </tbody>
+</table>
+
+<h2>7.2 Trace example</h2>
+<pre>{
+  "run_id": "run_01J9ZK4T7Q",
+  "origin": "user",
+  "question": "Should we accept 2,000 units at ₹380 with idle capacity?",
+  "intent": "special_order",
+  "tool": {"name": "run_differential_analysis", "version": "1.0.0"},
+  "plan_version": 3,
+  "confirmation": {
+    "required": true, "confirmed_by": "u_1042", "at": "2026-11-02T10:22:41Z",
+    "edits": [{"key": "capacity_state", "proposed": "idle", "confirmed": "idle",
+               "reason": "order fits within documented spare shift"}]
+  },
+  "pins": {
+    "snapshot_id": "snap_7f3c9a", "manifest_hash": "sha256:…",
+    "registry_version": 7, "engine_version": "1.4.2",
+    "rulebook_version": "2026.11.1", "prompt_version": "planner-1.6.0",
+    "model": "provider/model@2026-10"
+  },
+  "assumptions": [
+    {"id": "a1", "text": "Idle capacity exists for the order window",
+     "source": "user_implied", "confirmed": true},
+    {"id": "a2", "text": "No regular sales are displaced",
+     "source": "user_explicit", "confirmed": true}
+  ],
+  "steps": [
+    {"step_id": "s1", "rule_id": "DA-SO-001", "label": "Incremental revenue",
+     "formula": "order_units × order_price", "value": "760000.00", "unit": "INR"},
+    {"step_id": "s2", "rule_id": "DA-SO-002", "label": "Incremental variable cost",
+     "formula": "order_units × variable_cost_per_unit", "value": "-600000.00", "unit": "INR"},
+    {"step_id": "s3", "rule_id": "DA-SO-003", "label": "Incremental contribution",
+     "formula": "s1 + s2", "value": "160000.00", "unit": "INR"},
+    {"step_id": "s4", "rule_id": "DA-SO-004", "label": "Incremental fixed cost",
+     "formula": "incremental_fixed", "value": "-40000.00", "unit": "INR"},
+    {"step_id": "s5", "rule_id": "DA-SO-005", "label": "Opportunity cost",
+     "formula": "displaced_units × regular_contribution_per_unit", "value": "0.00", "unit": "INR"},
+    {"step_id": "s6", "rule_id": "DA-SO-006", "label": "Incremental profit",
+     "formula": "s3 + s4 + s5", "value": "120000.00", "unit": "INR"}
+  ],
+  "facts": [{"fact_id": "f1", "step_id": "s6", "value": "120000.00", "unit": "INR"}],
+  "validation": {"schema": "pass", "identities": "pass", "units": "pass",
+                 "coverage": "pass", "provenance": "pass"},
+  "response_hash": "sha256:…",
+  "latency_ms": {"plan": 1240, "execute": 210, "render": 1680, "total": 3130}
+}</pre>
+
+<h2>7.3 Hash chain and immutability</h2>
+<ul>
+  <li>Events are canonicalized as JSON with sorted keys, no insignificant whitespace, UTF-8, and decimals as strings.</li>
+  <li><code>event_hash = SHA256(previous_hash || canonical_json(event))</code>. The run seal stores the final hash. Any later mutation breaks the chain.</li>
+  <li>Audit rows are append-only in Postgres; a trigger rejects updates and deletes. Sealed run exports are written to object storage with object lock.</li>
+  <li>A verification endpoint recomputes the chain for a run or a date range and reports the first broken link.</li>
+  <li>Retention: audit metadata and traces for seven years; raw snapshots for thirteen months in the pilot, configurable per contract. Deleting a snapshot does not delete its audit metadata.</li>
+</ul>
+
+<h2>7.4 Re-performance</h2>
+<p>Re-performance is the operational definition of trust. The user opens a run, selects “Re-perform”, and the system re-executes the pinned tool against the pinned snapshot with the confirmed arguments. Every step value is compared to the stored value. The result is one of three states: <strong>exact match</strong>, <strong>display-rounding difference</strong> (documented, within the display tolerance), or <strong>mismatch</strong> (a defect, with the differing steps shown).</p>
+<ul>
+  <li>The engine wheel and container image for each released version are retained so a re-performance uses the same code, not today’s code.</li>
+  <li>The comparison is numeric only. Prose may differ because a model version changed; that is not a numerical mismatch.</li>
+  <li>A command-line re-performance tool supports sampled audits: <code>costpilot reperform --run run_01J9ZK4T7Q --json</code>.</li>
+  <li>Every completed run is sampled for nightly re-performance. A mismatch rate above zero is a release-blocking incident.</li>
+</ul>
+
+<h2>7.5 Analysis-card requirements</h2>
+<p>The card is the product surface. It must satisfy a controller who wants to check the answer and an analyst who wants to act on it. The following are mandatory, not stylistic:</p>
+<table>
+  <thead><tr><th style="width:24%">Element</th><th style="width:44%">Requirement</th><th style="width:32%">Why</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Header</strong></td><td>Restated question, period, entity, plant, product, basis, snapshot badge, run status.</td><td>Prevents answering the wrong scope or period.</td></tr>
+    <tr><td><strong>Verdict</strong></td><td>Engine-selected decision label and one fixed sentence. No hedging, no model-written conclusion.</td><td>Makes the recommendation auditable and stable.</td></tr>
+    <tr><td><strong>KPI strip</strong></td><td>Three to five headline facts, each linked to its step.</td><td>Fast scan without losing provenance.</td></tr>
+    <tr><td><strong>Differential table</strong></td><td>Every relevant line, relevant/excluded treatment, per-unit and total columns, F/A labels.</td><td>The working paper the analyst would otherwise build.</td></tr>
+    <tr><td><strong>Waterfall</strong></td><td>Variance decomposition with the residual labelled; no chart-derived numbers.</td><td>Pattern recognition without arithmetic in the browser.</td></tr>
+    <tr><td><strong>Assumptions</strong></td><td>Chips with source, confirmation state, edit affordance, and the effect of changing the assumption.</td><td>Prevents silent policy and capacity assumptions.</td></tr>
+    <tr><td><strong>Audit drawer</strong></td><td>Step list, rule IDs, formula, inputs, source records, validation results, re-perform action.</td><td>Re-performance path.</td></tr>
+    <tr><td><strong>Actions</strong></td><td>Export XLSX/PDF/JSON, re-perform, ask follow-up, open data-quality report.</td><td>Moves the answer into the close process.</td></tr>
+    <tr><td><strong>Remediation state</strong></td><td>When blocked, the card becomes an actionable remediation panel, not a generic error.</td><td>No dead ends.</td></tr>
+  </tbody>
+</table>
+<p><strong>Formatting rules.</strong> Finance tables are right-aligned with tabular figures. Variance magnitudes carry F/A text, not colour alone. Negative actual amounts use parentheses. Currency and date grouping follow the tenant locale. A number on screen must be present in the response payload; the client never derives a subtotal, percentage, or difference for display.</p>
+
+<h2>7.6 Claim mapping</h2>
+<p>Each rationale sentence maps to the facts it cites. The UI can highlight a sentence and show the corresponding step and source records. Qualitative claims map to an assumption or a rule citation; they cannot carry an implicit number. Suggested follow-up questions are selected from deterministic templates based on the tool, verdict, and capability card, so they cannot introduce a new analysis that the system cannot run.</p>
+<p>This mapping is also the basis for the “what would change this” section: the engine returns sensitivity points (for example, the floor price at different capacity states), and the renderer links each to the assumption that controls it. The model may phrase the link, but the values and the controlling assumption come from the trace.</p>
+
+<!-- ============================== 8 ============================== -->
+<h1><span class="num">8</span>API and interface contracts</h1>
+
+<p>The API is deliberately small. A session creates a plan; a plan is confirmed; a run executes and streams stages; a completed run exposes results, trace, re-performance, and exports. There is no endpoint that accepts free-form SQL or arbitrary computation. Every response is typed and versioned.</p>
+
+<h2>8.1 Endpoints</h2>
+<table>
+  <thead><tr><th style="width:34%">Endpoint</th><th style="width:34%">Purpose</th><th style="width:32%">Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST /v1/sessions</code></td><td>Create a conversation scoped to a dataset and snapshot.</td><td>Returns session ID and capability card.</td></tr>
+    <tr><td><code>POST /v1/sessions/{id}/messages</code></td><td>Send a question; returns a plan, clarification, or unsupported response.</td><td>Streams <code>plan.*</code> events; never executes without confirmation.</td></tr>
+    <tr><td><code>POST /v1/plans/{id}/confirm</code></td><td>Confirm or edit parameters; starts a run.</td><td>Idempotency key required; returns run ID and event stream URL.</td></tr>
+    <tr><td><code>POST /v1/plans/{id}/cancel</code></td><td>Abandon a plan.</td><td>No run is created.</td></tr>
+    <tr><td><code>GET /v1/runs/{id}</code></td><td>Completed run payload: verdict, facts, tables, assumptions, warnings, exports.</td><td>Returns 409 while running if no partial payload exists.</td></tr>
+    <tr><td><code>GET /v1/runs/{id}/events</code></td><td>SSE stream of run stages.</td><td>Reconnect with <code>Last-Event-ID</code>.</td></tr>
+    <tr><td><code>GET /v1/runs/{id}/trace</code></td><td>Full audit trace and validation results.</td><td>Scope-checked; amounts included only for authorized roles.</td></tr>
+    <tr><td><code>POST /v1/runs/{id}/reperform</code></td><td>Re-execute the pinned tool and compare steps.</td><td>Queued; returns comparison result.</td></tr>
+    <tr><td><code>GET /v1/runs/{id}/export?format=</code></td><td>XLSX, PDF, or JSON export of the working paper.</td><td>Asynchronous for large files; signed URL.</td></tr>
+    <tr><td><code>POST /v1/datasets</code></td><td>Upload a template file or start a connector extract.</td><td>Returns load ID; quality report follows.</td></tr>
+    <tr><td><code>GET /v1/datasets/{id}/quality</code></td><td>Gate results, coverage, remediation links.</td><td>Same payload as the quality card.</td></tr>
+    <tr><td><code>GET /v1/registry/accounts</code></td><td>Search and list registry versions.</td><td>Filter by amount, status, behavior.</td></tr>
+    <tr><td><code>PATCH /v1/registry/accounts/{id}</code></td><td>Propose a new classification version.</td><td>Requires approval before use in a run.</td></tr>
+    <tr><td><code>GET /v1/capabilities</code></td><td>Supported analyses, limits, and dataset readiness for the tenant.</td><td>Used by UI and planner; no model inference.</td></tr>
+  </tbody>
+</table>
+
+<h2>8.2 Example: plan, confirm, run</h2>
+<pre>POST /v1/sessions/ses_8a/messages
+{ "text": "Custom motor order: 2,000 units at ₹380. We have spare capacity." }
+
+200 OK
+{
+  "plan_id": "plan_5d",
+  "status": "awaiting_confirmation",
+  "plan": {
+    "intent": "special_order",
+    "tool": "run_differential_analysis",
+    "arguments": { "decision_type": "special_order", "product_id": "PRD-B",
+                   "order_units": "2000", "order_price": {"amount": "380.00", "currency": "INR"},
+                   "capacity_state": "idle" },
+    "confidence": 0.88
+  },
+  "parameter_sheet": [
+    {"key": "product_id", "label": "Product", "value": "PRD-B Custom motor",
+     "source": "lookup", "confirm": false},
+    {"key": "capacity_state", "label": "Capacity", "value": "Idle",
+     "source": "user_implied", "confirm": true,
+     "warning": "September utilization was 92% for PLT-01. Confirm spare capacity."},
+    {"key": "incremental_fixed_cost", "label": "Incremental fixed cost", "value": "Not provided",
+     "source": "missing", "confirm": true}
+  ],
+  "missing": ["incremental_fixed_cost"]
+}</pre>
+<pre>POST /v1/plans/plan_5d/confirm
+{ "plan_version": 1,
+  "edits": [{"key": "capacity_state", "value": "idle", "reason": "spare shift documented"},
+            {"key": "incremental_fixed_cost", "value": {"amount": "40000.00", "currency": "INR"}}] }
+
+202 Accepted
+{ "run_id": "run_01J9ZK4T7Q", "events": "/v1/runs/run_01J9ZK4T7Q/events" }</pre>
+<pre>GET /v1/runs/run_01J9ZK4T7Q
+{
+  "status": "completed",
+  "verdict": {"decision": "accept", "conditions": 4},
+  "facts": [{"id": "f1", "label": "Incremental profit", "value": "120000.00", "unit": "INR"}],
+  "tables": [{"id": "differential", "rows": 8}],
+  "assumptions": [{"id": "a1", "text": "Idle capacity exists", "confirmed": true}],
+  "audit": {"trace": "/v1/runs/run_01J9ZK4T7Q/trace",
+            "reperform": "/v1/runs/run_01J9ZK4T7Q/reperform"},
+  "exports": {"xlsx": "…", "pdf": "…", "json": "…"}
+}</pre>
+
+<h2>8.3 Streaming events</h2>
+<p>Stage events, not partial prose: a token stream of an unvalidated rationale invites the user to read numbers before they are checked. The UI shows progress against the state machine and renders the card once validation and rendering complete.</p>
+<table>
+  <thead><tr><th style="width:28%">Event</th><th style="width:72%">Payload</th></tr></thead>
+  <tbody>
+    <tr><td><code>plan.created</code></td><td>Plan ID, confidence, tool, missing fields.</td></tr>
+    <tr><td><code>clarification.required</code></td><td>One question, suggested answers, fields unblocked.</td></tr>
+    <tr><td><code>confirmation.required</code></td><td>Parameter sheet payload.</td></tr>
+    <tr><td><code>run.started</code></td><td>Run ID, pinned snapshot and versions.</td></tr>
+    <tr><td><code>step.completed</code></td><td>Step ID, label, duration. No values until validated.</td></tr>
+    <tr><td><code>run.validated</code></td><td>Validation summary; warnings count.</td></tr>
+    <tr><td><code>run.completed</code></td><td>Full card payload and export links.</td></tr>
+    <tr><td><code>run.failed</code></td><td>Error envelope with remediation actions.</td></tr>
+    <tr><td><code>heartbeat</code></td><td>Keep-alive every 15 seconds.</td></tr>
+  </tbody>
+</table>
+
+<h2>8.4 Error taxonomy</h2>
+<p>Every error has a code, a cause, what was checked, and executable remediation. The client renders remediation as buttons, not as a sentence the user must translate into an action.</p>
+<table>
+  <thead><tr><th style="width:25%">Code</th><th style="width:10%">HTTP</th><th style="width:40%">Meaning</th><th style="width:25%">Remediation actions</th></tr></thead>
+  <tbody>
+    <tr><td><code>E_PLAN_AMBIGUOUS</code></td><td>200</td><td>Plan confidence below threshold or dimensions ambiguous.</td><td><code>choose_interpretation</code>, <code>select_dimension</code></td></tr>
+    <tr><td><code>E_PLAN_UNSUPPORTED</code></td><td>200</td><td>Intent outside the capability card.</td><td><code>show_supported</code>, <code>nearest_analysis</code></td></tr>
+    <tr><td><code>E_PLAN_SCHEMA</code></td><td>422</td><td>Planner output failed schema or policy.</td><td><code>retry_plan</code>, <code>open_form</code></td></tr>
+    <tr><td><code>E_ASSUMPTION_UNCONFIRMED</code></td><td>409</td><td>Policy-bearing assumption lacks confirmation.</td><td><code>open_parameter_sheet</code></td></tr>
+    <tr><td><code>E_DATA_MISSING</code></td><td>409</td><td>Mandatory fact not loaded.</td><td><code>upload_template</code>, <code>exclude_scope</code></td></tr>
+    <tr><td><code>E_DATA_QUALITY</code></td><td>409</td><td>Blocking gate failed.</td><td><code>fix_account_tag</code>, <code>view_gate</code>, <code>reload_file</code></td></tr>
+    <tr><td><code>E_ENGINE_DOMAIN</code></td><td>422</td><td>Mathematical or policy precondition violated.</td><td><code>review_inputs</code>, <code>run_alternative_view</code></td></tr>
+    <tr><td><code>E_VALIDATION_PROVENANCE</code></td><td>500</td><td>Rendered narrative failed provenance after retry.</td><td><code>view_trace</code>, <code>report_issue</code>; template fallback already used.</td></tr>
+    <tr><td><code>E_LLM_UNAVAILABLE</code></td><td>503</td><td>Planner or renderer unavailable.</td><td><code>open_form</code>, <code>tables_only</code>, <code>retry</code></td></tr>
+    <tr><td><code>E_AUTH_SCOPE</code></td><td>403</td><td>Requested scope outside the user’s role.</td><td><code>request_access</code>, <code>change_scope</code></td></tr>
+    <tr><td><code>E_EXPORT_FAILED</code></td><td>500</td><td>Export generation failed.</td><td><code>retry</code>, <code>alternate_format</code></td></tr>
+    <tr><td><code>E_RATE_LIMIT</code></td><td>429</td><td>Tenant or user limit exceeded.</td><td><code>retry_after</code>, <code>queue</code></td></tr>
+  </tbody>
+</table>
+
+<h2>8.5 Exports</h2>
+<p>The export is a copy of a validated run, not a fresh calculation. It carries the run ID, snapshot ID, engine and rulebook versions, and the validation summary on every sheet or page.</p>
+<ul>
+  <li><strong>XLSX:</strong> tabs for Summary, Analysis, Trace, Assumptions, Sources, and Data Quality. Numbers are stored as numbers with explicit formats, not strings. Freeze panes and column widths are set. No macros.</li>
+  <li><strong>Formula-injection protection:</strong> any text cell beginning with <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>, tab, or carriage return is prefixed with an apostrophe. This applies to account names, product names, and every imported string.</li>
+  <li><strong>PDF:</strong> server-rendered from the same structured payload as the card, not a screenshot. Page footer includes run ID and “Draft” status until the run is sealed.</li>
+  <li><strong>JSON:</strong> the full trace schema for audit tooling and re-performance.</li>
+</ul>
+
+<h2>8.6 Frontend surface</h2>
+<table>
+  <thead><tr><th style="width:26%">Component</th><th style="width:74%">Responsibility</th></tr></thead>
+  <tbody>
+    <tr><td><code>ChatComposer</code></td><td>Text input, dataset/snapshot context, suggested questions from capabilities.</td></tr>
+    <tr><td><code>PlanCard</code></td><td>What will run, which tool, which fields are missing; no verdict.</td></tr>
+    <tr><td><code>ParameterSheet</code></td><td>Argument values, source badges, edits, warnings, confirmation.</td></tr>
+    <tr><td><code>AnalysisCard</code></td><td>Verdict, KPI strip, tables, waterfall, assumptions, audit drawer, actions.</td></tr>
+    <tr><td><code>FinanceTable</code></td><td>Right-aligned tabular figures, F/A labels, row-level source links, no client arithmetic.</td></tr>
+    <tr><td><code>VarianceWaterfall</code></td><td>Renders engine-supplied bar values; no derived heights.</td></tr>
+    <tr><td><code>AssumptionChips</code></td><td>Source, confirmation, edit, and “what changes if…” link.</td></tr>
+    <tr><td><code>AuditDrawer</code></td><td>Steps, rules, formulas, sources, validation, re-perform.</td></tr>
+    <tr><td><code>RemediationCard</code></td><td>Error cause, checked items, action buttons.</td></tr>
+    <tr><td><code>RegistryGrid</code></td><td>Bulk classification sorted by amount, evidence panel, approval workflow.</td></tr>
+  </tbody>
+</table>
+<p>Client state is server state. Financial values are fetched, never computed. Percentages, subtotals, and differences shown in the interface are fields in the payload. If a field is missing, the UI shows a dash and a link to the trace, not a client-side calculation.</p>
+
+<!-- ============================== 9 ============================== -->
+<h1><span class="num">9</span>Repository and engineering standards</h1>
+
+<h2>9.1 Monorepo layout</h2>
+<pre>costpilot/
+  apps/web/                     Next.js application
+  services/api/                 FastAPI app, auth, sessions, runs, streaming
+  services/worker/              ingestion, snapshots, exports, monitoring, re-performance
+  packages/contracts/           Pydantic models → JSON Schema → TypeScript types
+  packages/planner/             prompts, planner client, plan validation, policy
+  packages/renderer/            verdict templates, formatting, slot substitution, exports
+  packages/audit/               trace models, hash chain, sealing, verification
+  packages/data/                schema DDL, ingestion, quality gates, query compiler
+  packages/engine/              pure calculation library (Section 6.2)
+  tests/golden/                 YAML golden cases and expected traces
+  tests/property/               Hypothesis identity and metamorphic tests
+  tests/integration/            fixtures → snapshot → tool → trace → export
+  evals/                        planner datasets, scoring, red-team suite
+  deploy/                       Dockerfiles, compose, migrations, runbooks
+  docs/                         ADRs, rulebook catalogue, this blueprint</pre>
+<p>The import graph is enforced: <code>engine</code> imports only standard library and its own modules; <code>renderer</code> imports contracts and formatting utilities, never the database; <code>planner</code> imports contracts, never the engine; <code>api</code> may orchestrate but may not contain formulas. An import-linter contract fails CI on violation.</p>
+
+<h2>9.2 Stack decisions</h2>
+<table>
+  <thead><tr><th style="width:18%">Layer</th><th style="width:34%">Choice</th><th style="width:48%">Rationale and rejected alternative</th></tr></thead>
+  <tbody>
+    <tr><td>API</td><td>Python 3.12, FastAPI, Pydantic v2</td><td>Async, typed, OpenAPI. Rejected Django: heavier and ORM-centric for an analytics API.</td></tr>
+    <tr><td>Analytical store</td><td>DuckDB over immutable Parquet snapshots</td><td>Zero-ops columnar engine, fast scans, easy per-snapshot isolation. Postgres remains the metadata store and the migration path for very large deployments.</td></tr>
+    <tr><td>Metadata store</td><td>PostgreSQL 16, SQL-first with Alembic migrations</td><td>Audit integrity, transactions, row-level access. Rejected ORM-heavy access for analytics; metadata only.</td></tr>
+    <tr><td>Jobs</td><td>Redis 7 with RQ</td><td>Simple, observable, adequate for ingestion and exports. Rejected Celery for operational overhead at pilot scale.</td></tr>
+    <tr><td>LLM access</td><td>Provider SDK behind a gateway</td><td>No agent framework in the hot path. LangChain-style orchestration hides prompts, retries, and tool boundaries; the orchestrator is deterministic and must stay inspectable.</td></tr>
+    <tr><td>Frontend</td><td>Next.js 15, React 19, TypeScript, Tailwind</td><td>Server-rendered shell, typed client, fast iteration. Charts with visx so no library computes values.</td></tr>
+    <tr><td>Contracts</td><td>Pydantic → JSON Schema → generated TypeScript</td><td>One source of truth for tools, API, forms, and client types. Contract diffs fail CI.</td></tr>
+    <tr><td>Testing</td><td>pytest, Hypothesis, Playwright</td><td>Formula correctness, invariants, end-to-end flows. Golden cases are data, not code.</td></tr>
+    <tr><td>Packaging</td><td>uv, Docker, GitHub Actions</td><td>Reproducible builds and fast CI. Signed images and SBOM at release.</td></tr>
+    <tr><td>Observability</td><td>OpenTelemetry, structured logs, Prometheus metrics</td><td>Run-level tracing without logging amounts by default.</td></tr>
+    <tr><td>Exports</td><td>openpyxl, headless Chromium print</td><td>Native numeric cells and formula-injection protection; PDF from the same payload.</td></tr>
+  </tbody>
+</table>
+
+<h2>9.3 Coding standards</h2>
+<ul>
+  <li><strong>Engine purity.</strong> No I/O, no database, no model, no clock, no random. Inputs and outputs are frozen dataclasses. Every rule has a docstring with its rule ID, source citation, and a worked example.</li>
+  <li><strong>No floats.</strong> A lint rule bans <code>float</code> in engine code. Decimal is constructed from strings. Division contexts are explicit.</li>
+  <li><strong>Typed boundaries.</strong> <code>mypy --strict</code> on contracts, engine, planner, and renderer. The API may use narrower typing at the framework edge only.</li>
+  <li><strong>SQL discipline.</strong> Parameterized queries only; no string interpolation of user values. Query compiler owns scope predicates. Every analytical query is reviewed and has a test fixture.</li>
+  <li><strong>Errors are typed.</strong> Domain exceptions carry a code and remediation. No bare <code>Exception</code> reaches the API boundary.</li>
+  <li><strong>Logs exclude amounts by default.</strong> Log IDs, hashes, stages, durations, and gate results. Amounts are available in the trace to authorized users, not in application logs.</li>
+  <li><strong>Version everything that changes an answer:</strong> engine, rulebook, registry, tool, prompt, contract schema, snapshot transform. Versions are semantic and stored in the run.</li>
+  <li><strong>ADRs for structural changes.</strong> Data model, trust boundary, tool contract, and trace schema changes require a short architecture decision record.</li>
+</ul>
+
+<h2>9.4 CI gates</h2>
+<table>
+  <thead><tr><th style="width:22%">Stage</th><th style="width:78%">Gate</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Pull request</strong></td><td>Lint, strict types, unit tests, fast golden subset, contract compatibility diff, import-boundary check, dependency and secret scan, frontend build and component tests.</td></tr>
+    <tr><td><strong>Nightly</strong></td><td>Full golden corpus, property and metamorphic suite, live planner eval, performance smoke, re-performance sample, accessibility scan.</td></tr>
+    <tr><td><strong>Release</strong></td><td>Migration up/down test, full E2E, load test at pilot concurrency, backup and restore drill, SBOM and signed image, runbook review.</td></tr>
+  </tbody>
+</table>
+<p>No merge with a failing golden case. No release with a provenance or verdict-fidelity failure. A performance regression above 20% on the decision path requires an explicit waiver with an owner and a date.</p>
+
+<h2>9.5 Observability and SLOs</h2>
+<table>
+  <thead><tr><th style="width:32%">Signal</th><th style="width:68%">Target or use</th></tr></thead>
+  <tbody>
+    <tr><td>Decision answer latency</td><td>p95 under 10 seconds end to end; planner under 3 seconds; engine under 300 ms; render under 3 seconds.</td></tr>
+    <tr><td>Variance pack latency</td><td>p95 under 60 seconds for one million GL rows in scope.</td></tr>
+    <tr><td>Run success rate</td><td>Above 99% excluding user-correctable data errors; every failure carries a remediation.</td></tr>
+    <tr><td>Provenance failure rate</td><td>Below 0.5%; any sustained breach is a model-quality incident.</td></tr>
+    <tr><td>Re-performance mismatch</td><td>Zero. Any mismatch blocks release and triggers an audit.</td></tr>
+    <tr><td>Ingestion success</td><td>Above 99% of valid files; quality-gate pass rate tracked by customer.</td></tr>
+    <tr><td>LLM cost and tokens</td><td>Tracked per run and per tenant; pilot target under $0.10 per completed analysis.</td></tr>
+    <tr><td>Availability</td><td>99.5% pilot business hours; planned maintenance excluded.</td></tr>
+  </tbody>
+</table>
+<p>Spans cover each state-machine stage. Logs carry <code>run_id</code>, <code>tenant_id</code>, <code>stage</code>, <code>tool</code>, <code>rule_version</code>, and <code>latency_ms</code>. Alerts fire on validator failure rate, queue backlog, snapshot build failure, audit write failure, and p95 latency breach. Audit write failure fails the run closed: no answer without a sealed record.</p>
+
+<h2>9.6 Security and privacy</h2>
+<table>
+  <thead><tr><th style="width:28%">Threat</th><th style="width:72%">Control</th></tr></thead>
+  <tbody>
+    <tr><td>Cross-tenant or cross-plant access</td><td>OIDC authentication; roles viewer, analyst, controller, admin; row scope injected into SQL; per-tenant snapshots; authorization matrix tests.</td></tr>
+    <tr><td>Prompt injection through imported text</td><td>Account, product, and vendor strings are delimited as data; the planner receives no raw rows; data text can never change policy or trigger a tool; suspicious strings flagged.</td></tr>
+    <tr><td>Data exfiltration through the model</td><td>Metadata-only planner context; facts-only narration; zero-retention, no-training provider terms; region pinning; redacted request logging.</td></tr>
+    <tr><td>Malicious uploads</td><td>Type allowlist, size limit, macro rejection, zip-bomb protection, virus scan, staging isolation.</td></tr>
+    <tr><td>Spreadsheet formula injection on export</td><td>Prefix dangerous cell starts; escape strings; no macros; numeric cells typed.</td></tr>
+    <tr><td>Connector overreach</td><td>Read-only least-privilege credentials; no write scopes; egress allowlist; control-total reconciliation.</td></tr>
+    <tr><td>Audit tampering</td><td>Append-only tables, hash chain, object lock on sealed exports, verification endpoint.</td></tr>
+    <tr><td>Secret leakage</td><td>Vault or managed secrets; no secrets in env files committed; dependency and secret scanning.</td></tr>
+    <tr><td>Model error presented as fact</td><td>Slot protocol, verdict templates, validator, template fallback, re-performance.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================== 10 ============================== -->
+<h1><span class="num">10</span>Test and evaluation strategy</h1>
+
+<p>Correctness is demonstrated, not asserted. The test strategy has two independent axes: deterministic tests that prove the engine and data layer, and model evaluations that prove the planner and narration contract. A passing engine suite with a failing model eval is not a shippable product; neither is the reverse.</p>
+
+<h2>10.1 Test layers</h2>
+<table>
+  <thead><tr><th style="width:22%">Layer</th><th style="width:48%">Scope</th><th style="width:30%">Gate</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Rule units</strong></td><td>Every formula, sign, zero, negative, rounding, and missing-input case.</td><td>100% golden match; 95% branch coverage on engine.</td></tr>
+    <tr><td><strong>Property tests</strong></td><td>Identities such as MCV = MPV + MUV, bridge ties, ABC sums, flexible-budget ties, break-even yields zero income.</td><td>No counterexample in 1,000 generated cases per property.</td></tr>
+    <tr><td><strong>Metamorphic tests</strong></td><td>Scaling, price-only changes, quantity-only changes, reallocation, actual equals budget.</td><td>Expected monotonic or exact response.</td></tr>
+    <tr><td><strong>Contract tests</strong></td><td>Tool schemas, API payloads, TypeScript types, trace schema, backward compatibility.</td><td>No breaking diff without a version bump.</td></tr>
+    <tr><td><strong>Integration</strong></td><td>Fixture → ingestion → gates → snapshot → tool → trace → export.</td><td>End-to-end fixture passes for every workflow.</td></tr>
+    <tr><td><strong>Planner evals</strong></td><td>Intent, parameters, clarification, missing data, unsupported intent, injection.</td><td>Thresholds below.</td></tr>
+    <tr><td><strong>E2E</strong></td><td>Browser flows: ask, confirm, view, audit, re-perform, export, fix a gate.</td><td>Critical flows green on every release.</td></tr>
+    <tr><td><strong>Performance</strong></td><td>Decision latency, variance pack, ingestion, concurrency, memory.</td><td>Budgets in Section 9.5.</td></tr>
+  </tbody>
+</table>
+
+<h2>10.2 Golden corpus</h2>
+<p>Golden cases are the product’s specification in executable form. Every worked example in the reference curriculum becomes a case, plus variants for edge conditions. Cases are YAML, versioned with the rulebook, and reviewed by the cost-accounting SME.</p>
+<pre>id: VAR-MAT-001
+module: variance.material
+rule: MA-VAR-001
+source: "Curriculum, Unit 7, worked example 2"
+inputs:
+  standard_price: "50.00"
+  actual_price: "52.00"
+  actual_quantity_used: "20500"
+  standard_quantity_allowed: "20000"
+expected:
+  mpv: "-41000.00"
+  muv: "-25000.00"
+  mcv: "-66000.00"
+  favorable: false
+assertions:
+  identities: ["mcv == mpv + muv"]
+  trace_steps: 3
+  units: ["INR", "INR", "INR"]</pre>
+<p>Coverage of the corpus: material, labour, variable and fixed overhead, flexible budget, sales price and volume, all seven decision workflows with at least three variants each (idle/constrained, profitable/unprofitable, missing/complete data), the costing bridge in both inventory directions, CVP at zero and negative contribution, and Phase 2 ABC, budget chain, ROI, and residual income. The corpus grows with every defect: a bug fix without a regression case is incomplete.</p>
+
+<h2>10.3 Property and metamorphic tests</h2>
+<ul>
+  <li>Scaling all volumes and variable costs by <em>k</em> scales contribution by <em>k</em> and leaves fixed cost unchanged.</li>
+  <li>A change in actual price moves MPV and leaves MUV unchanged when quantity is held constant.</li>
+  <li>A change in actual quantity moves MUV and leaves MPV unchanged when price is held constant.</li>
+  <li>At the computed floor price, incremental profit is exactly zero.</li>
+  <li>At the shutdown indifference point, operate and shut down profit are equal.</li>
+  <li>When actual volume equals budget volume, the flexible budget equals the static budget and the volume variance is zero.</li>
+  <li>Reallocating an ABC pool across drivers preserves the total allocated plus unused capacity.</li>
+  <li>For any inventory increase, absorption income minus variable income equals change in units × fixed overhead rate.</li>
+  <li>Rounding the display never changes the stored step value or the re-performance result.</li>
+</ul>
+
+<h2>10.4 Planner and narration evaluations</h2>
+<table>
+  <thead><tr><th style="width:40%">Metric</th><th style="width:20%">Threshold</th><th style="width:40%">Dataset</th></tr></thead>
+  <tbody>
+    <tr><td>Top-1 intent accuracy</td><td>≥ 97%</td><td>250 questions across seven workflows, variance, bridge, and unsupported intents.</td></tr>
+    <tr><td>Required-argument exactness</td><td>≥ 98%</td><td>Same set, scored field by field, including units and currency.</td></tr>
+    <tr><td>Appropriate clarification</td><td>≥ 95%</td><td>80 ambiguous or incomplete questions.</td></tr>
+    <tr><td>Missing-data detection</td><td>≥ 98%</td><td>60 questions with a deliberately absent driver or standard.</td></tr>
+    <tr><td>Unsupported-intent refusal</td><td>≥ 95%</td><td>40 out-of-scope requests, including requests to estimate.</td></tr>
+    <tr><td>Uncited numeric claims</td><td>0</td><td>Every generated rationale in the eval set.</td></tr>
+    <tr><td>Verdict fidelity</td><td>100%</td><td>Every decision case; the rendered verdict must equal the engine verdict.</td></tr>
+    <tr><td>Injection resistance</td><td>100%</td><td>30 adversarial rows, questions, and account names; no policy change or tool escalation.</td></tr>
+    <tr><td>Planner p95 latency</td><td>≤ 3 s</td><td>Production-like model endpoint.</td></tr>
+  </tbody>
+</table>
+<p>Evals run against recorded fixtures on every pull request and against the live model nightly. A model or prompt change that fails a threshold cannot ship. Scores are stored with the prompt hash so regressions are attributable.</p>
+
+<h2>10.5 Data-quality and ingestion tests</h2>
+<ul>
+  <li>Fixture per gate: schema mismatch, orphan account, missing period, duplicate hash, control-total break, low coverage, missing UOM, mixed currency, sign anomaly, outlier, missing standard card, missing usage.</li>
+  <li>Blocking gates must prevent snapshot creation and produce a remediation card. Warnings must not block.</li>
+  <li>Unknown dimension members must land in the mapping queue, never in canonical facts.</li>
+  <li>Re-loading a corrected file creates a new snapshot with lineage; the prior snapshot remains byte-identical.</li>
+  <li>Snapshot manifest re-hashing reproduces the snapshot ID.</li>
+</ul>
+
+<h2>10.6 Performance and reliability tests</h2>
+<p>The performance fixture is one million GL rows across two plants and three products, plus standards, budgets, and volumes. Tests measure cold and warm snapshot queries, decision latency, variance-pack generation, concurrent analyst sessions, memory per worker, and export time. Reliability tests cover worker crash during ingestion (no partial canonical load), snapshot corruption (rebuild from Parquet), audit write failure (run fails closed), and model outage (workflow lane and tables-only mode).</p>
+
+<h2>10.7 Pilot acceptance</h2>
+<ul class="checklist">
+  <li>A controller re-performs five answers, one from each workflow family, without engineering help.</li>
+  <li>The pilot team reproduces one real close-cycle variance pack end to end and uses it as the working paper.</li>
+  <li>No answer in the pilot contains an uncited number or an unconfirmed policy assumption.</li>
+  <li>The special-order analysis returns in under ten seconds and matches a hand-built working paper.</li>
+  <li>Every blocked analysis produces a remediation that the pilot team can complete without a support call.</li>
+  <li>Export opens in Excel with live numbers, correct formats, and no formula execution from imported strings.</li>
+</ul>
+<!-- ============================== 11 ============================== -->
+<h1><span class="num">11</span>Delivery roadmap</h1>
+
+<p>The milestone sequence follows the dependency chain, not the sales narrative. Variance and audit come before chat because the chat shell is only useful once the tools are trustworthy. Decision analysis comes before the planner for the same reason, and because it is the strongest end-to-end demonstration. Durations below are indicative for a team of three engineers, one part-time frontend engineer, and a cost-accounting advisor; they assume the synthetic dataset is ready at M0.</p>
+
+<h2>11.1 Phase 1 sequence</h2>
+<table>
+  <thead><tr><th style="width:9%">Milestone</th><th style="width:8%">Time</th><th style="width:44%">Contents</th><th style="width:39%">Exit gate</th></tr></thead>
+  <tbody>
+    <tr><td><strong>M0</strong><br>Foundations</td><td>1 wk</td><td>Repository, CI, contracts, trace models, Decimal utilities, rule registry skeleton, golden harness, three-product/two-plant fixture, ADRs for trust boundary and data model.</td><td>CI green; one dummy rule executes with a complete trace; contracts and schema v0 reviewed.</td></tr>
+    <tr><td><strong>M1</strong><br>Data + formulas</td><td>3 wks</td><td>Canonical schema, ingestion, quality gates, account registry, snapshot builder, material/labour/overhead formulas, flexible budget.</td><td>All Unit 7/8 golden cases pass; fixture reconciles to control totals; weighted coverage ≥ 99%; manifest re-hash reproduces the snapshot ID.</td></tr>
+    <tr><td><strong>M2</strong><br>Variance + audit</td><td>3 wks</td><td>Account-level flux, standard-cost explainer, drill-down, cause catalogue, materiality thresholds, costing bridge, slot narration, audit drawer, XLSX export.</td><td>One month of actuals produces a close-ready pack; every fact cited; three controller re-performances pass; export opens with live numbers.</td></tr>
+    <tr><td><strong>M3</strong><br>Decision engine</td><td>3 wks</td><td>Seven workflows, parameter confirmation, qualitative checklists, sensitivity, capacity conflict checks, verdict templates.</td><td>Special order returns in under 10 s; 21 decision golden cases pass; floor price and sensitivity exact; zero uncited numbers.</td></tr>
+    <tr><td><strong>M4</strong><br>Planner + shell</td><td>3 wks</td><td>Planner prompt and client, metadata tools, sessions, SSE, parameter sheet, generated workflow forms, RBAC, remediation cards, PDF/JSON export.</td><td>A non-accountant completes ten tasks unassisted; intent ≥ 97%; injection suite 100%; cross-scope access denied; every error has an action.</td></tr>
+    <tr><td><strong>M5</strong><br>Pilot</td><td>2–3 wks</td><td>Hardening, load test, runbooks, documentation, one live close-cycle trial, defect burn-down.</td><td>Pilot acceptance checklist complete; no open P1; SLOs met for two consecutive weeks; controller sign-off on audit.</td></tr>
+  </tbody>
+</table>
+
+<h2>11.2 Critical path and demonstration</h2>
+<p>The critical path is <strong>M0 → M1 → M2 → M4 → M5</strong>. M3 runs in parallel with M2 once M1 lands, using the same engine contracts and a different fixture. The first sellable demonstration is M3’s special-order answer running end to end with confirmation, audit, and export. The first operational proof is M2’s close-ready variance pack, because it exercises ingestion, gates, flexible budget, narration, and export on messy data.</p>
+<p>Two dates matter more than the rest. The <strong>M1 gate</strong> decides whether the data layer is real; if coverage or reconciliation is weak, stop and fix it rather than building UI on sand. The <strong>M2 gate</strong> decides whether the narration protocol works under production variance data; if the slot validator is noisy, fix it before adding seven more workflows.</p>
+
+<h2>11.3 Team shape</h2>
+<table>
+  <thead><tr><th style="width:24%">Role</th><th style="width:14%">Allocation</th><th style="width:62%">Responsibility</th></tr></thead>
+  <tbody>
+    <tr><td>Technical lead / backend</td><td>1.0</td><td>Orchestrator, contracts, security, data layer, integration, release.</td></tr>
+    <tr><td>Engine / data engineer</td><td>1.0</td><td>Rulebook, engine modules, golden corpus, quality gates, snapshots.</td></tr>
+    <tr><td>Frontend engineer</td><td>1.0</td><td>Chat, parameter sheet, analysis cards, audit drawer, registry grid, exports UI.</td></tr>
+    <tr><td>Cost-accounting advisor</td><td>0.4–0.5</td><td>Rulebook review, golden cases, cause catalogue, pilot data readiness, controller acceptance.</td></tr>
+    <tr><td>Product / design</td><td>0.25</td><td>Scope control, card information hierarchy, pilot coordination.</td></tr>
+    <tr><td>DevOps / security</td><td>0.25</td><td>Deployment, secrets, backups, observability, security review.</td></tr>
+  </tbody>
+</table>
+<p>The advisor is not optional. Without a cost accountant reviewing the rulebook and golden cases weekly, the team will encode formulas that look plausible and fail a controller’s first test — particularly in overhead sign conventions, relevant-cost treatment, and semi-variable splits.</p>
+
+<h2>11.4 Phase 2 sequence and extension points</h2>
+<table>
+  <thead><tr><th style="width:9%">Milestone</th><th style="width:10%">Time</th><th style="width:45%">Contents</th><th style="width:36%">Exit gate</th></tr></thead>
+  <tbody>
+    <tr><td><strong>M6</strong><br>Connectors</td><td>4 wks</td><td>SAP or NetSuite read connector, account-mapping workflow, ingestion quality reports, control totals, incremental extraction.</td><td>A live extract loads into the registry and reconciles to ERP control totals; mappings approved by a human.</td></tr>
+    <tr><td><strong>M7</strong><br>ABC / TDABC</td><td>4 wks</td><td>Cost pools, drivers, driver events, activity rates, allocation, traditional-versus-ABC profitability, TDABC capacity rates, customer profitability.</td><td>Reproduces hidden undercosting of low-volume products on pilot data; allocations tie to pools; unused capacity reported separately.</td></tr>
+    <tr><td><strong>M8</strong><br>Monitoring</td><td>2 wks</td><td>Rolling variance and anomaly detection, materiality-ranked digest, natural-language alert rules compiled to engine queries.</td><td>Pilot team receives a weekly exception digest with no manual report run; alerts link to full traces.</td></tr>
+    <tr><td><strong>M9</strong><br>Budgeting</td><td>4 wks</td><td>Sales-to-cash budget chain, versioned consolidation, scenario overlays, rolling reforecast.</td><td>One full reforecast in days rather than weeks; version differences explainable by the engine.</td></tr>
+    <tr><td><strong>M10</strong><br>Performance</td><td>2–3 wks</td><td>ROI and residual income comparison, controllability tagging, lightweight auto-populated scorecard.</td><td>Divisional review runs on copilot output; no parallel spreadsheet.</td></tr>
+    <tr><td><strong>M11</strong><br>Group + hardening</td><td>4 wks</td><td>Multi-entity bridges, report-pack export, RBAC expansion, governance polish, intercompany flags.</td><td>Phase 1 and Phase 2 pilot team operates weekly without CSV fallback.</td></tr>
+  </tbody>
+</table>
+<p><strong>Dependencies.</strong> M6 precedes M7, M8, and M10 because they need richer ingestion. M9 can run in parallel with M7 once M6 is stable. M11 follows M7–M10. The Phase 1 trace, tool envelope, and snapshot manifest are unchanged in Phase 2; new tools add new result types, not a second audit mechanism.</p>
+<p><strong>Extension points designed now, not later.</strong> The tool registry is versioned so Phase 2 tools can be added without breaking the planner. The snapshot schema is additive, with driver events as new facts rather than a parallel store. The executor treats a monitor run exactly like a user run, with <code>origin=monitor</code>, so alerts inherit the same trace and validation. The connector interface is defined as discover, extract, control-totals, and map, with human approval on mappings. Budget versions and scenario overlays are new tables keyed by the same period and account dimensions. No Phase 1 module may assume a single product, plant, or period in a way that blocks multi-entity reporting.</p>
+
+<h2>11.5 Change control</h2>
+<p>Four artifacts are under change control: the tool contract, the trace schema, the data schema, and the rulebook. A change to any of them requires an ADR, a version bump, a migration plan, and the relevant eval or golden suite. Prompt changes require the planner eval subset. A change to the scope contract in Section 12.3 requires explicit product-owner and engineering-lead approval; it is not a backlog decision.</p>
+
+<!-- ============================== 12 ============================== -->
+<h1><span class="num">12</span>Risks and open decisions</h1>
+
+<h2>12.1 Build risks</h2>
+<table>
+  <thead><tr><th style="width:27%">Risk</th><th style="width:10%">Severity</th><th style="width:63%">Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td>Pilot cost data is untagged or unreconciled</td><td><span class="tag block">High</span></td><td>Treat the registry as M1 scope; run a data-readiness assessment before signing a pilot; make remediation a product surface; choose a pilot with a named data owner and 12 months of history.</td></tr>
+    <tr><td>The planner chooses the wrong workflow or misses a parameter</td><td><span class="tag block">High</span></td><td>Confirmation sheet, confidence threshold, metadata-only tools, 250-question eval, workflow form fallback, and a planner that can say “unsupported”.</td></tr>
+    <tr><td>Narration validator becomes brittle and blocks answers</td><td><span class="tag warn">Medium</span></td><td>Build the slot protocol at M2, not M4; keep the numeric rule simple; use template fallback rather than repeated regeneration; track failure rate as a model-quality metric.</td></tr>
+    <tr><td>Rule drift between engine, documentation, and UI</td><td><span class="tag warn">Medium</span></td><td>Single rule registry, generated rulebook catalogue, rule IDs in every trace, golden cases reviewed by the SME, no formulas outside the engine.</td></tr>
+    <tr><td>DuckDB or snapshot performance degrades at scale</td><td><span class="tag warn">Medium</span></td><td>Benchmark at M1 with one million rows; pre-aggregate marts; memory caps per worker; keep a Postgres/columnar migration path; avoid per-row Python loops.</td></tr>
+    <tr><td>Scope creeps toward ERP, consolidation, or ABC in Phase 1</td><td><span class="tag warn">Medium</span></td><td>Out-of-scope contract; milestone gates; change control; defer connector and ABC requests to M6/M7 even when a pilot asks.</td></tr>
+    <tr><td>Users trust a conditional verdict as unconditional</td><td><span class="tag block">High</span></td><td>Verdict templates encode conditions; assumptions are visible chips; unresolved qualitative checks make the verdict conditional; export repeats the conditions.</td></tr>
+    <tr><td>Model provider changes, deprecates, or fails residency review</td><td><span class="tag warn">Medium</span></td><td>Provider abstraction, pinned model versions, eval suite portable across providers, region-pinned zero-retention terms, workflow lane works without the model.</td></tr>
+    <tr><td>Audit storage and trace size grow faster than expected</td><td><span class="tag warn">Medium</span></td><td>Compress traces; store facts and steps, not raw query results; separate hot metadata from cold exports; seven-year retention with tiering.</td></tr>
+    <tr><td>Key-person dependence on the cost-accounting advisor</td><td><span class="tag warn">Medium</span></td><td>Rulebook as written specification; golden cases encode the advisor’s judgement; two reviewers on rule changes; record policy decisions as ADRs.</td></tr>
+  </tbody>
+</table>
+
+<h2>12.2 Open decisions and defaults</h2>
+<p>These are the choices this blueprint makes provisionally. Each needs an owner and a decision date; until then, the default applies and is recorded in the run.</p>
+<table>
+  <thead><tr><th style="width:24%">Decision</th><th style="width:42%">Default</th><th style="width:18%">Owner</th><th style="width:16%">By</th></tr></thead>
+  <tbody>
+    <tr><td>LLM provider and residency</td><td>Frontier model via a zero-retention, region-pinned gateway; provider abstraction from day one.</td><td>Eng lead + security</td><td>M0</td></tr>
+    <tr><td>Hosting model</td><td>Single-tenant managed private cloud; customer VPC as an option for the pilot.</td><td>Eng lead</td><td>M2</td></tr>
+    <tr><td>Authentication</td><td>OIDC with the customer’s identity provider; local accounts only for development.</td><td>Eng lead</td><td>M4</td></tr>
+    <tr><td>Queue and job runner</td><td>Redis with RQ; no Celery at pilot scale.</td><td>Eng lead</td><td>M4</td></tr>
+    <tr><td>Inventory costing method</td><td>Standard costing only in Phase 1; FIFO and weighted average flagged as unsupported.</td><td>Cost advisor</td><td>M1</td></tr>
+    <tr><td>Material price variance basis</td><td>Usage basis for tie-out; purchase-basis variance shown as a supplement when quantities differ.</td><td>Cost advisor</td><td>M1</td></tr>
+    <tr><td>Semi-variable split</td><td>User-specified split or high-low over at least six periods; regression in Phase 2.</td><td>Cost advisor</td><td>M1</td></tr>
+    <tr><td>Rounding and display</td><td>Full precision in trace; half-up display; currency 2, rates and quantities 4, percentages 2; visible rounding adjustment.</td><td>Eng lead</td><td>M1</td></tr>
+    <tr><td>Currency scope</td><td>One functional currency per entity; no FX translation in Phase 1.</td><td>Product</td><td>M1</td></tr>
+    <tr><td>Cause catalogue ownership</td><td>SME-curated catalogue keyed to variance patterns; the model phrases causes, never invents them.</td><td>Cost advisor</td><td>M2</td></tr>
+    <tr><td>Data retention</td><td>Audit metadata seven years; raw snapshots thirteen months in the pilot; contractual override allowed.</td><td>Product + security</td><td>M5</td></tr>
+    <tr><td>ABC allocation method</td><td>Direct and step-down in Phase 2; reciprocal allocation deferred to Phase 3.</td><td>Cost advisor</td><td>M7</td></tr>
+    <tr><td>Budget scope</td><td>Template chain, versioned consolidation, and scenarios only; no form-based budget capture UI.</td><td>Product</td><td>M9</td></tr>
+    <tr><td>Scorecard weights</td><td>Client-owned, no defaults; weights are versioned and visible per result.</td><td>Product</td><td>M10</td></tr>
+  </tbody>
+</table>
+
+<h2>12.3 Phase 1 scope contract</h2>
+<p>The following are out of scope. They are not “later if there is time”; they are deferred with a destination, and reopening any of them requires explicit approval.</p>
+<table>
+  <thead><tr><th style="width:34%">Excluded</th><th style="width:36%">Reason</th><th style="width:30%">Destination</th></tr></thead>
+  <tbody>
+    <tr><td>ABC / TDABC product and customer profitability</td><td>Needs driver and activity data most pilot companies cannot supply quickly.</td><td>Phase 2, M7</td></tr>
+    <tr><td>Budgeting workflows and rolling forecasts</td><td>Organizational process change more than software; needs versioned chain.</td><td>Phase 2, M9</td></tr>
+    <tr><td>Performance measurement and scorecards</td><td>Secondary to the close-pain wedge; politically sensitive.</td><td>Phase 2, M10</td></tr>
+    <tr><td>ERP connectors</td><td>Integration effort is large; template ingress proves the concept.</td><td>Phase 2, M6</td></tr>
+    <tr><td>Multi-currency, translation, intercompany, consolidation</td><td>Enterprise rollout concerns, not concept proof.</td><td>Phase 2 M11 / Phase 3</td></tr>
+    <tr><td>Write-back to ledgers or ERP</td><td>Trust and security; the product is read-only by design.</td><td>Not planned</td></tr>
+    <tr><td>Statutory reporting, tax, audit opinion</td><td>Different discipline and liability profile.</td><td>Not planned</td></tr>
+    <tr><td>Marketing decision analytics</td><td>No domain knowledge layer in the curriculum yet.</td><td>Phase 3</td></tr>
+    <tr><td>ML demand forecasting</td><td>Forecasting is not the wedge; scenarios are deterministic.</td><td>Phase 3 or partner</td></tr>
+    <tr><td>Native mobile app</td><td>Responsive web is sufficient for analysts.</td><td>Not planned</td></tr>
+  </tbody>
+</table>
+
+<h2>12.4 Release definition of done</h2>
+<ul class="checklist">
+  <li>All golden cases pass; no skipped or quarantined rule.</li>
+  <li>Zero provenance failures and zero verdict-fidelity failures in the release eval.</li>
+  <li>Re-performance sample is 100% exact; any display-rounding differences are documented.</li>
+  <li>Planner eval thresholds met on the release model and prompt hash.</li>
+  <li>Performance budgets met on the one-million-row fixture.</li>
+  <li>Security scan clean of high and critical findings; export injection test passes.</li>
+  <li>Audit hash chain verifies for the release fixture runs.</li>
+  <li>Every error code has an actionable remediation in the UI.</li>
+  <li>Runbooks updated for model outage, queue backlog, snapshot rebuild, and audit failure.</li>
+  <li>Cost-accounting advisor signs the rulebook diff and the pilot acceptance checklist.</li>
+</ul>
+
+<!-- ============================== APPENDICES ============================== -->
+<h1><span class="num">13</span>Appendices</h1>
+
+<h2>A. Glossary</h2>
+<table>
+  <thead><tr><th style="width:20%">Term</th><th style="width:80%">Definition</th></tr></thead>
+  <tbody>
+    <tr><td><strong>ABC</strong></td><td>Activity-based costing: allocating indirect costs through activity pools and drivers rather than volume bases.</td></tr>
+    <tr><td><strong>TDABC</strong></td><td>Time-driven ABC: capacity cost rate multiplied by time per transaction; unused capacity is measured explicitly.</td></tr>
+    <tr><td><strong>MPV / MUV / MCV</strong></td><td>Material price, usage, and total cost variances. MCV = MPV + MUV under the usage basis.</td></tr>
+    <tr><td><strong>LRV / LEV / LCV</strong></td><td>Labour rate, efficiency, and total cost variances.</td></tr>
+    <tr><td><strong>VOH / FOH</strong></td><td>Variable and fixed manufacturing overhead.</td></tr>
+    <tr><td><strong>Flexible budget</strong></td><td>A budget restated at actual volume, separating volume effects from spending, price, and efficiency effects.</td></tr>
+    <tr><td><strong>Contribution margin</strong></td><td>Revenue minus variable costs; the amount available to cover fixed costs and profit.</td></tr>
+    <tr><td><strong>CVP</strong></td><td>Cost-volume-profit analysis: break-even, target profit, margin of safety, operating leverage.</td></tr>
+    <tr><td><strong>Relevant cost</strong></td><td>A future cost that differs between alternatives. Sunk costs and unavoidable allocated costs are excluded.</td></tr>
+    <tr><td><strong>Opportunity cost</strong></td><td>Contribution forgone from the best alternative use of a scarce resource.</td></tr>
+    <tr><td><strong>Avoidable cost</strong></td><td>A fixed cost that disappears if an activity, product, or facility is removed.</td></tr>
+    <tr><td><strong>Standard cost card</strong></td><td>Per-unit standards for material, labour, and overhead used in product costing and variance analysis.</td></tr>
+    <tr><td><strong>Snapshot</strong></td><td>An immutable, hashed set of canonical facts plus a registry and schema version, pinned by a run.</td></tr>
+    <tr><td><strong>Step / fact</strong></td><td>A calculation step is a rule application with inputs and a value; a fact is the render-facing projection of a step.</td></tr>
+    <tr><td><strong>Rule ID</strong></td><td>A stable identifier for a formula or decision policy, versioned and cited in the trace.</td></tr>
+    <tr><td><strong>Provenance</strong></td><td>The chain from a displayed number to a fact, a step, a rule, and a source record.</td></tr>
+    <tr><td><strong>Re-performance</strong></td><td>Re-executing a pinned run against its snapshot and code version and comparing every step value.</td></tr>
+  </tbody>
+</table>
+
+<h2>B. Contract snippets</h2>
+<h3>Tool result envelope</h3>
+<pre>interface ToolEnvelope {
+  run_id: string;
+  status: "ok" | "blocked" | "error";
+  snapshot_id: string;
+  result: Record&lt;string, unknown&gt;;
+  facts: Fact[];
+  assumptions: Assumption[];
+  warnings: Warning[];
+  remediation: RemediationAction[];
+  trace_ref: string;
+}
+
+interface Fact {
+  fact_id: string;          // "f1"
+  step_id: string;          // "s6"
+  label: string;
+  value: string;            // exact decimal string
+  unit: string;             // "INR", "INR/unit", "units"
+  format: "INR" | "INR0" | "PCT1" | "PCT2" | "QTY0" | "QTY2" | "RATIO2" | "HOURS1";
+}</pre>
+
+<h3>Plan and error types</h3>
+<pre>interface Plan {
+  intent: Intent;
+  tool: string;
+  tool_version: string;
+  arguments: Record&lt;string, unknown&gt;;
+  assumptions: Assumption[];
+  missing: string[];
+  clarification: Clarification | null;
+  confidence: number;
+}
+
+interface ErrorEnvelope {
+  code: ErrorCode;
+  message: string;
+  cause: string;
+  checked: string[];
+  remediation: RemediationAction[];
+}
+
+interface RemediationAction {
+  action: string;           // "fix_account_tag", "upload_template", "open_parameter_sheet"
+  label: string;
+  deep_link?: string;
+  payload?: Record&lt;string, unknown&gt;;
+}</pre>
+
+<h2>C. Audit trace schema</h2>
+<table>
+  <thead><tr><th style="width:30%">Field</th><th style="width:22%">Type</th><th style="width:48%">Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>run_id</code></td><td>string</td><td>ULID; stable across retries of the same confirmed plan.</td></tr>
+    <tr><td><code>origin</code></td><td>enum</td><td><code>user</code>, <code>monitor</code>, <code>reperformance</code>.</td></tr>
+    <tr><td><code>question</code></td><td>string</td><td>Original user text; redacted only if it contains secrets.</td></tr>
+    <tr><td><code>plan</code></td><td>object</td><td>Raw and normalized plan, version, confidence, clarification.</td></tr>
+    <tr><td><code>confirmation</code></td><td>object</td><td>Required flag, user, timestamp, proposed versus confirmed edits.</td></tr>
+    <tr><td><code>pins</code></td><td>object</td><td>Snapshot, manifest, registry, engine, rulebook, prompt, model, tool versions.</td></tr>
+    <tr><td><code>arguments</code></td><td>object</td><td>Resolved arguments with dimension labels; money as amount and currency.</td></tr>
+    <tr><td><code>assumptions</code></td><td>array</td><td>ID, text, source, confidence, confirmation, effect.</td></tr>
+    <tr><td><code>steps</code></td><td>array</td><td>Step ID, rule ID and version, formula, inputs, value, unit, source refs.</td></tr>
+    <tr><td><code>facts</code></td><td>array</td><td>Fact ID, step ID, label, exact value, unit, format.</td></tr>
+    <tr><td><code>verdict</code></td><td>object</td><td>Decision enum, template ID and version, conditions.</td></tr>
+    <tr><td><code>rationale</code></td><td>object</td><td>Raw placeholder text, rendered text, validation result, fallback flag.</td></tr>
+    <tr><td><code>validation</code></td><td>map</td><td>Schema, identities, units, basis, coverage, assumptions, provenance.</td></tr>
+    <tr><td><code>hashes</code></td><td>object</td><td>Input, output, previous event, event hash.</td></tr>
+    <tr><td><code>latency_ms</code></td><td>object</td><td>Plan, execute, validate, render, total.</td></tr>
+    <tr><td><code>error</code></td><td>object | null</td><td>Error envelope when the run failed.</td></tr>
+  </tbody>
+</table>
+
+<h2>D. Rulebook template and ID convention</h2>
+<p>Rule IDs use a module prefix and a three-digit sequence. The version is the rule’s own semantic version, independent of the engine version. A rule change that can alter a number requires a major or minor bump and a new golden case.</p>
+<table>
+  <thead><tr><th style="width:18%">Prefix</th><th style="width:44%">Scope</th><th style="width:38%">Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>MA-VAR</code></td><td>Material variances</td><td><code>MA-VAR-001</code> material price, usage basis</td></tr>
+    <tr><td><code>LA-VAR</code></td><td>Labour variances</td><td><code>LA-VAR-002</code> labour efficiency</td></tr>
+    <tr><td><code>OH-VAR</code></td><td>Overhead variances</td><td><code>OH-VAR-004</code> fixed overhead volume</td></tr>
+    <tr><td><code>FB-VAR</code></td><td>Flexible budget</td><td><code>FB-VAR-001</code> flexible-budget variance</td></tr>
+    <tr><td><code>SAL-VAR</code></td><td>Sales variances</td><td><code>SAL-VAR-002</code> sales volume</td></tr>
+    <tr><td><code>DA-*</code></td><td>Differential analysis</td><td><code>DA-SO-006</code> special-order incremental profit</td></tr>
+    <tr><td><code>CVP</code></td><td>Cost-volume-profit</td><td><code>CVP-001</code> break-even units</td></tr>
+    <tr><td><code>CB</code></td><td>Costing bridge</td><td><code>CB-001</code> absorption-versus-variable profit</td></tr>
+    <tr><td><code>ABC</code>, <code>TDABC</code></td><td>Activity costing</td><td><code>ABC-003</code> pool rate; <code>TDABC-002</code> unused capacity</td></tr>
+    <tr><td><code>BUD</code></td><td>Budget chain</td><td><code>BUD-002</code> material purchases</td></tr>
+    <tr><td><code>PERF</code></td><td>Performance</td><td><code>PERF-002</code> residual income</td></tr>
+  </tbody>
+</table>
+<pre>id: DA-SO-006
+version: 1.0.0
+title: Special-order incremental profit
+module: decisions.special_order
+source: "Curriculum, relevant-cost chapter; policy decision ADR-014"
+formula: revenue - variable_cost - incremental_fixed - opportunity_cost
+inputs:
+  order_units: quantity
+  order_price: money_per_unit
+  variable_cost_per_unit: money_per_unit
+  incremental_fixed: money
+  opportunity_cost: money
+outputs:
+  incremental_profit: money
+  verdict: enum[accept, reject, investigate]
+policy:
+  exclude_allocated_fixed: true
+  include_opportunity_cost: true
+  conditional_if_unresolved_checklist: true
+tests:
+  - GOLDEN-DA-SO-001
+  - GOLDEN-DA-SO-002
+  - PROP-DA-SO-FLOOR</pre>
+
+<h2>E. Source-to-blueprint traceability</h2>
+<table>
+  <thead><tr><th style="width:38%">Source requirement</th><th style="width:34%">Blueprint location</th><th style="width:28%">Milestone</th></tr></thead>
+  <tbody>
+    <tr><td>Language model never performs arithmetic</td><td>§2 I1; §4.1, §4.6; §6.1</td><td>M0, M2, M4</td></tr>
+    <tr><td>Every answer carries an audit trail</td><td>§7; §8.2, §8.3</td><td>M2, M4</td></tr>
+    <tr><td>Account registry with fixed/variable and direct/indirect tags</td><td>§5.4</td><td>M1</td></tr>
+    <tr><td>Standard-cost variance decomposition</td><td>§6.4</td><td>M1, M2</td></tr>
+    <tr><td>Flexible-budget restatement</td><td>§6.4</td><td>M2</td></tr>
+    <tr><td>Seven short-run decision workflows</td><td>§6.5, §6.7</td><td>M3</td></tr>
+    <tr><td>Variable versus absorption costing bridge</td><td>§6.6</td><td>M2</td></tr>
+    <tr><td>ABC / TDABC and product profitability</td><td>§5.9, §6.8</td><td>M7</td></tr>
+    <tr><td>Budgeting, consolidation, rolling forecast</td><td>§5.9, §6.8</td><td>M9</td></tr>
+    <tr><td>ROI, residual income, lightweight scorecard</td><td>§6.8</td><td>M10</td></tr>
+    <tr><td>Read-only ERP connectors with governed mappings</td><td>§3.5, §5.9, §9.6</td><td>M6</td></tr>
+    <tr><td>Continuous monitoring and materiality-ranked alerts</td><td>§5.9, §6.8, §11.4</td><td>M8</td></tr>
+    <tr><td>Group-level bridges and intercompany flags</td><td>§6.8, §11.4</td><td>M11</td></tr>
+    <tr><td>Same question, same number</td><td>§2 I3; §7.3, §7.4</td><td>M1, M5</td></tr>
+    <tr><td>No silent assumptions</td><td>§2 I5; §4.5</td><td>M3, M4</td></tr>
+    <tr><td>No dead-end errors</td><td>§2 I9; §8.4</td><td>M4</td></tr>
+  </tbody>
+</table>
+
+<h2>F. Pilot data-readiness checklist</h2>
+<ul class="checklist">
+  <li>Twelve months of GL actuals at account × plant × cost-center grain, with a control-total reconciliation per period.</li>
+  <li>Chart of accounts with statement, type, and a named owner for classification decisions.</li>
+  <li>Standard cost cards covering at least 90% of product cost, with material, labour, variable overhead, and fixed overhead components.</li>
+  <li>Standard usage per product: material quantity, labour hours, machine hours, and UOM.</li>
+  <li>Actual quantities, prices, hours, and rates, or a subledger extract from which they can be produced.</li>
+  <li>Production, sales, and inventory movement by product and plant.</li>
+  <li>Budget by account and period, with the version that was in force during the close.</li>
+  <li>Capacity and utilization evidence for the plants in scope, sufficient to test an idle-capacity claim.</li>
+  <li>For Phase 2: setup, inspection, purchase-order, and order-line event logs for at least one plant.</li>
+  <li>A named data owner, a cost-accounting reviewer, a security review contact, and a pilot close date.</li>
+</ul>
+
+<p class="sig" style="margin-top:8mm">End of blueprint · Version 1.0 · November 2026 · Companion to the CostPilot White Paper, Phase 1 Plan, and Phase 2 Plan.</p>
+</body>
+</html>

@@ -1,0 +1,4 @@
+product_id,name,family
+PRD-A,Standard motor,motors
+PRD-B,Custom motor,motors
+PRD-C,Servo drive,drives
