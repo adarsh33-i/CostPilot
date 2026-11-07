@@ -458,6 +458,7 @@ def plan_message(
     session_id: str | None = None,
     hints: dict[str, Any] | None = None,
     attachments: list[dict[str, Any]] | None = None,
+    attachment_records: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     lowered = text.lower().strip()
     hints = hints or {}
@@ -956,7 +957,12 @@ def plan_message(
             if attachment_choice is not None:
                 from costpilot.data.statements import detect_statements
 
-                detected = detect_statements(attachment_choice)
+                # Detection needs the full extract; the chat-safe view keeps only a
+                # preview, so prefer the stored record when the caller supplied it.
+                detected_view = (attachment_records or {}).get(
+                    str(attachment_choice.get("attachment_id"))
+                ) or attachment_choice
+                detected = detect_statements(detected_view)
                 if detected is None:
                     if statement_turnover is None:
                         missing.append("turnover")

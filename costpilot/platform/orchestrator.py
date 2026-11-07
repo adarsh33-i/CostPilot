@@ -444,8 +444,10 @@ class Orchestrator:
 
     def _load_attachments(
         self, user: User, attachment_ids: list[str]
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+        """Return the chat-safe views and the full records for server-side detection."""
         views = []
+        records: dict[str, dict[str, Any]] = {}
         for attachment_id in attachment_ids:
             record = self.service.attachment(str(attachment_id))
             if record is None:
@@ -461,7 +463,8 @@ class Orchestrator:
                     "Upload your own copy of the document.",
                 )
             views.append(public_view(record, rows=8))
-        return views
+            records[str(attachment_id)] = record
+        return views, records
 
     # ---------- planning ----------
 
@@ -476,7 +479,9 @@ class Orchestrator:
         self._session(user, session_id)
         self.auth.require(user, "read")
         text = (text or "").strip()
-        attachment_views = self._load_attachments(user, attachment_ids or [])
+        attachment_views, attachment_records = self._load_attachments(
+            user, attachment_ids or []
+        )
         if not text and attachment_views:
             text = "Summarise the attached file."
         if not text:
@@ -514,6 +519,7 @@ class Orchestrator:
             session_id=session_id,
             hints=hints,
             attachments=attachment_views,
+            attachment_records=attachment_records,
         )
         plan["question"] = text
         if model_error:

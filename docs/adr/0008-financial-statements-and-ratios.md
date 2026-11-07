@@ -24,6 +24,11 @@ modes.
    that disagrees with its components raises an informational `FIN_CONFLICT` warning
    rather than being replaced. A missing cash flow raises `FIN_NO_CASHFLOW` and is
    not estimated.
+   When a PDF, Word file or OCR'd screenshot carries the lines as prose with no table
+   structure, the parser pairs standard labels with the amounts that follow, masks
+   dates and years, applies one document-level scale, and reads the current and prior
+   columns left to right. A table is always preferred; the prose path is used only
+   when the tables yield no statement lines.
 2. **Model mode builds a consistent set.** Turnover and explicit assumptions produce
    an income statement, balance sheet and indirect cash flow. Cash is the balancing
    item, so total assets equal total liabilities plus equity and closing cash equals

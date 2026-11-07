@@ -712,7 +712,7 @@ def _parse(attachment: dict[str, Any], period: str | None = None) -> StatementEx
             continue
         tables.append((str(table.get("name") or "table"), table, label_index, columns))
     if not tables:
-        return extract
+        return _parse_text(attachment, period)
 
     current_period, prior_period, current_year = _choose_periods(tables, period)
     prior_year = None
@@ -828,7 +828,201 @@ def _parse(attachment: dict[str, Any], period: str | None = None) -> StatementEx
             extract.values[key] = -extract.values[key]
         if key in extract.prior and extract.prior[key] < Decimal("0"):
             extract.prior[key] = -extract.prior[key]
+    if not extract.values:
+        # A PDF, Word file or screenshot can hold the statements as text with no
+        # table structure. Use the prose only when the tables yielded no lines.
+        text_extract = _parse_text(attachment, period)
+        if text_extract.values:
+            return text_extract
     extract.available = _classify(extract)
     if len(extract.scales) > 1:
         extract.warnings.append("The file uses more than one amount scale; each column was scaled separately.")
+    return extract
+
+
+_TEXT_AMOUNT = re.compile(
+    r"(?<![\w.])(?P<number>[+-]?\(?\d[\d,]*(?:\.\d+)?\)?)"
+    r"\s*(?P<pct>%)?"
+    r"\s*(?P<scale>(?:lakhs?|lacs?|crores?|cr|millions?|mn|billions?|bn|thousands?|k)\b)?",
+    re.IGNORECASE,
+)
+_TEXT_SCALES = {
+    **SCALES,
+    "cr": SCALES["crores"],
+    "lac": SCALES["lacs"],
+    "mn": SCALES["millions"],
+    "bn": SCALES["billion"],
+    "k": SCALES["thousands"],
+}
+_TEXT_LABEL_TAIL = re.compile(
+    r"\b(?:for|the|year|years|ended|end|as|at|of|period|in|was|were|is|are|"
+    r"stood|amounted|totaled|totalled|to)\s*$",
+    re.IGNORECASE,
+)
+_TEXT_DATE = re.compile(
+    r"\b(?:as\s+at|as\s+of|for\s+the\s+year\s+ended|year\s+ended|fy)\s*"
+    r"\d{1,2}\s+[A-Za-z]+\s+\d{4}\b"
+    r"|\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4}\b"
+    r"|\b[A-Za-z]+\s+\d{4}\b"
+    r"|\bfy\s*-?\s*\d{2,4}\b",
+    re.IGNORECASE,
+)
+
+
+def _text_values(
+    line: str, *, allow_small: bool = False
+) -> tuple[str, list[tuple[Decimal, bool]]]:
+    """Split a printed line into its label and the amounts that follow it.
+
+    The second item of each amount says whether the figure carried its own scale
+    word, so the document-level scale is applied once and never twice.
+    """
+    cleaned = _TEXT_DATE.sub(lambda match: " " * len(match.group(0)), line)
+    found: list[tuple[int, Decimal, bool, bool]] = []
+    for match in _TEXT_AMOUNT.finditer(cleaned):
+        if match.group("pct"):
+            continue
+        raw = match.group("number")
+        number = parse_number(raw)
+        if number is None:
+            continue
+        scale_word = (match.group("scale") or "").lower()
+        scale = _TEXT_SCALES.get(scale_word)
+        plain = not scale and "," not in raw and "." not in raw
+        if (
+            plain
+            and not allow_small
+            and abs(number) < 1000
+            and len(raw.lstrip("+-()")) <= 3
+        ):
+            continue
+        if plain and 1900 <= abs(number) <= 2100:
+            continue
+        found.append(
+            (match.start(), number * scale if scale else number, bool(scale), plain)
+        )
+    if not found:
+        return line.strip(), []
+    label_end = found[0][0]
+    if (
+        allow_small
+        and len(found) >= 2
+        and found[0][3]
+        and not found[0][2]
+        and abs(found[0][1]) < 100
+        and abs(found[1][1]) >= abs(found[0][1]) * 10
+    ):
+        # A bare one- or two-digit integer printed before the amount columns is a
+        # note reference ("Revenue from operations 3 1,000 900"), not an amount.
+        found.pop(0)
+    label = cleaned[:label_end].strip(" :=\t-–—")
+    while True:
+        trimmed = _TEXT_LABEL_TAIL.sub("", label).strip(" :=\t-–—")
+        if trimmed == label:
+            break
+        label = trimmed
+    return label, [(value, scaled) for _, value, scaled, _ in found]
+
+
+def _parse_text(attachment: dict[str, Any], period: str | None = None) -> StatementExtract:
+    """Read statement lines printed as text, without a table structure."""
+    extract = StatementExtract()
+    text = str(attachment.get("text") or "")
+    if not text.strip():
+        return extract
+
+    year_lines = [
+        line
+        for line in text.splitlines()
+        if re.search(
+            r"\b(?:fy|years?|ended|as\s+at|as\s+of|balance\s+sheet|profit\s+and\s+loss|"
+            r"cash\s+flow|particulars|march|december)\b",
+            line,
+            re.IGNORECASE,
+        )
+    ]
+    year_source = "\n".join(year_lines) if year_lines else text
+    years = sorted(
+        {int(year) for year in re.findall(r"(?<!\d)(20\d{2})(?!\d)", year_source)},
+        reverse=True,
+    )
+    current_year = years[0] if years else None
+    index = 0
+    if period:
+        wanted = _year_from_header(period)
+        if years and wanted not in years:
+            options = ", ".join(f"FY{year}" for year in years) or "no year in the document"
+            raise StatementError(
+                "E_STATEMENT_PERIOD",
+                f"The document has no column for period {period!r}.",
+                f"Use one of these periods: {options}.",
+            )
+        if wanted in years:
+            current_year = wanted
+            index = years.index(wanted)
+    prior_year = years[index + 1] if len(years) > index + 1 and index >= 0 else None
+    extract.current_period = (
+        f"FY{current_year}" if current_year else (period.upper() if period else None)
+    )
+    extract.prior_period = f"FY{prior_year}" if prior_year else None
+    extract.periods = [f"FY{year}" for year in years]
+    if not extract.periods and period:
+        extract.periods = [period.upper()]
+
+    scale = _scale_from_text(text) or ONE
+    if scale != ONE:
+        extract.scales[str(scale)] = "amounts scaled from the document text"
+
+    section: str | None = None
+    for position, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        label, amounts = _text_values(line, allow_small=scale != ONE)
+        if not amounts:
+            heading = _section_of(label)
+            if heading:
+                section = heading
+            continue
+        key = lookup_line(label, section)
+        if key is None and "(" in label:
+            key = lookup_line(re.sub(r"\([^)]*\)", " ", label), section)
+        if key is None:
+            if normalize_label(label) not in _SECTION_WORDS and len(extract.unmatched) < 12:
+                extract.unmatched.append(label)
+            continue
+        value, scaled = amounts[index] if index < len(amounts) else amounts[0]
+        if not scaled:
+            value *= scale
+        prior_value = None
+        if prior_year and index + 1 < len(amounts):
+            prior_value, prior_scaled = amounts[index + 1]
+            if not prior_scaled:
+                prior_value *= scale
+        source = f"text · line {position}"
+        if key in ADDITIVE and key in extract.values:
+            extract.values[key] += value
+            if prior_value is not None:
+                extract.prior[key] = extract.prior.get(key, Decimal("0")) + prior_value
+        elif key not in extract.values:
+            extract.values[key] = value
+            extract.labels[key] = label
+            extract.sources[key] = source
+            if prior_value is not None:
+                extract.prior[key] = prior_value
+        else:
+            extract.warnings.append(
+                f"{label!r} was ignored because {extract.labels.get(key, key)!r} already supplies "
+                f"{key.replace('_', ' ')}."
+            )
+
+    _rollup(extract, "inventory", ("inventory_raw", "inventory_wip", "inventory_finished"), "Inventories")
+    _rollup(extract, "operating_expenses", ("opex_component",), "Operating expenses")
+    _rollup(extract, "equity", ("share_capital", "reserves"), "Total equity")
+    for key in ("cost_of_sales", "operating_expenses", "depreciation", "interest", "tax"):
+        if key in extract.values and extract.values[key] < Decimal("0"):
+            extract.values[key] = -extract.values[key]
+        if key in extract.prior and extract.prior[key] < Decimal("0"):
+            extract.prior[key] = -extract.prior[key]
+    extract.available = _classify(extract)
     return extract

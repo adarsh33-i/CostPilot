@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import zipfile
 from decimal import Decimal
 
 import pytest
@@ -98,6 +99,102 @@ def budget_xlsx() -> bytes:
     return buffer.getvalue()
 
 
+def pdf_statements() -> bytes:
+    from reportlab.pdfgen import canvas
+
+    lines = [
+        "Statement of Profit and Loss for FY2025",
+        "Revenue 100,000,000",
+        "Cost of sales 60,000,000",
+        "Gross profit 40,000,000",
+        "Operating expenses 20,000,000",
+        "Depreciation 5,000,000",
+        "Finance cost 2,000,000",
+        "Profit before tax 13,000,000",
+        "Tax expense 3,000,000",
+        "Net profit 10,000,000",
+        "Balance Sheet as at 31 March 2025",
+        "Property, plant and equipment 30,000,000",
+        "Inventories 10,000,000",
+        "Trade receivables 15,000,000",
+        "Cash and cash equivalents 5,000,000",
+        "Total current assets 30,000,000",
+        "Share capital 10,000,000",
+        "Reserves and surplus 20,000,000",
+        "Total equity 30,000,000",
+        "Long-term borrowings 12,000,000",
+        "Other non-current liabilities 5,000,000",
+        "Trade payables 8,000,000",
+        "Short-term borrowings 5,000,000",
+        "Total current liabilities 13,000,000",
+        "Total liabilities 30,000,000",
+        "Total liabilities and equity 60,000,000",
+    ]
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer)
+    for index, line in enumerate(lines):
+        pdf.drawString(50, 800 - index * 18, line)
+    pdf.save()
+    return buffer.getvalue()
+
+
+def docx_statements() -> bytes:
+    paragraphs = [
+        "Statement of Profit and Loss for FY2025",
+        "Revenue 100,000,000",
+        "Cost of sales 60,000,000",
+        "Gross profit 40,000,000",
+        "Operating expenses 20,000,000",
+        "Depreciation 5,000,000",
+        "Finance cost 2,000,000",
+        "Profit before tax 13,000,000",
+        "Tax expense 3,000,000",
+        "Net profit 10,000,000",
+        "Balance Sheet as at 31 March 2025",
+        "Property, plant and equipment 30,000,000",
+        "Inventories 10,000,000",
+        "Trade receivables 15,000,000",
+        "Cash and cash equivalents 5,000,000",
+        "Total current assets 30,000,000",
+        "Share capital 10,000,000",
+        "Reserves and surplus 20,000,000",
+        "Total equity 30,000,000",
+        "Long-term borrowings 12,000,000",
+        "Other non-current liabilities 5,000,000",
+        "Trade payables 8,000,000",
+        "Short-term borrowings 5,000,000",
+        "Total current liabilities 13,000,000",
+        "Total liabilities 30,000,000",
+        "Total liabilities and equity 60,000,000",
+    ]
+    body = "".join(f"<w:p><w:r><w:t>{line}</w:t></w:r></w:p>" for line in paragraphs)
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body></w:document>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", xml)
+    return buffer.getvalue()
+
+
+def text_statements() -> bytes:
+    return (
+        "Statement of Profit and Loss in ₹ lakh for FY2025 and FY2024\n"
+        "Revenue 1,000 900\n"
+        "Cost of sales 600 550\n"
+        "Gross profit 400 350\n"
+        "Operating expenses 200 180\n"
+        "Depreciation 50 45\n"
+        "Finance cost 20 18\n"
+        "Profit before tax 130 107\n"
+        "Tax expense 30 25\n"
+        "Net profit 100 82\n"
+        "© 2019 CostPilot"
+    ).encode()
+
+
 @pytest.fixture()
 def statements() -> dict:
     return extract(statement_xlsx(), "statements.xlsx")
@@ -130,6 +227,69 @@ def test_parser_scales_a_lakh_header_once():
     assert Decimal(parsed.values["revenue"]) == Decimal("100000000")
     assert Decimal(parsed.values["net_income"]) == Decimal("10000000")
     assert parsed.scales
+
+
+def test_parser_reads_statement_lines_from_a_text_only_pdf():
+    attachment = extract(pdf_statements(), "statements.pdf")
+    parsed = parse_statements(attachment)
+    assert attachment["tables"] == []
+    assert parsed.current_period == "FY2025"
+    assert Decimal(parsed.values["revenue"]) == Decimal("100000000")
+    assert Decimal(parsed.values["net_income"]) == Decimal("10000000")
+    assert set(parsed.available) >= {"income", "balance"}
+    assert parsed.unmatched == []
+
+    result = run_financial_statements(attachment, mode="reported")
+    assert result.meta["mode"] == "reported"
+    assert result.meta["balance_check"]["ok"] is True
+    assert "FIN_NO_CASHFLOW" in {warning.code for warning in result.warnings}
+
+
+def test_parser_reads_statement_lines_from_a_word_document():
+    attachment = extract(docx_statements(), "statements.docx")
+    parsed = parse_statements(attachment)
+    assert attachment["tables"] == []
+    assert parsed.current_period == "FY2025"
+    assert Decimal(parsed.values["revenue"]) == Decimal("100000000")
+    assert Decimal(parsed.values["net_income"]) == Decimal("10000000")
+    assert set(parsed.available) >= {"income", "balance"}
+
+    result = run_financial_statements(attachment, mode="reported")
+    assert result.meta["mode"] == "reported"
+    assert result.meta["balance_check"]["ok"] is True
+
+
+def test_text_parser_applies_one_lakh_scale_and_reads_the_prior_column():
+    attachment = extract(text_statements(), "statements.txt")
+    parsed = parse_statements(attachment)
+    assert parsed.current_period == "FY2025"
+    assert parsed.prior_period == "FY2024"
+    assert Decimal(parsed.values["revenue"]) == Decimal("100000000")
+    assert Decimal(parsed.prior["revenue"]) == Decimal("90000000")
+    assert parsed.scales
+
+    prior = parse_statements(attachment, period="FY2024")
+    assert prior.current_period == "FY2024"
+    assert prior.prior_period is None  # a stray footer year is not an amount column
+    assert Decimal(prior.values["revenue"]) == Decimal("90000000")
+
+
+def test_text_parser_ignores_a_printed_note_reference():
+    raw = (
+        "Statement of Profit and Loss for FY2025 and FY2024\n"
+        "Amounts in ₹ lakh\n"
+        "Revenue from operations 3 1,000 900\n"
+        "Cost of sales 4 600 550\n"
+        "Gross profit 400 350\n"
+        "Operating expenses 200 180\n"
+        "Depreciation 50 45\n"
+        "Finance cost 20 18\n"
+        "Net profit 100 82\n"
+    ).encode()
+    parsed = parse_statements(extract(raw, "statements.txt"))
+    assert Decimal(parsed.values["revenue"]) == Decimal("100000000")
+    assert Decimal(parsed.prior["revenue"]) == Decimal("90000000")
+    assert Decimal(parsed.values["net_income"]) == Decimal("10000000")
 
 
 def test_parser_rejects_a_period_the_file_does_not_hold(statements):
@@ -337,6 +497,21 @@ def test_planner_keeps_a_statement_attachment_and_uses_reported_mode(
     assert mismatch["status"] == "needs_clarification"
     options = " ".join(mismatch["clarification"]["options"])
     assert "FY2025" in options and "FY2024" in options
+
+
+def test_planner_reads_statements_from_a_text_only_pdf(
+    service, orchestrator, controller, session
+):
+    view = service.create_attachment(pdf_statements(), "statements.pdf", user=controller)
+    payload = orchestrator.post_message(
+        controller, session, "Prepare the financial statements", attachment_ids=[view["attachment_id"]]
+    )
+    assert payload["status"] == "ready"
+    assert payload["plan"]["arguments"]["mode"] == "reported"
+    card = orchestrator.confirm_plan(controller, payload["plan_id"])["card"]
+    assert card["header"]["statement_mode"] == "reported"
+    assert card["header"]["period_id"] == "FY2025"
+    assert any(table["id"] == "statement_income" for table in card["tables"])
 
 
 def test_planner_models_a_statementless_attachment_and_states_why(

@@ -325,6 +325,12 @@ before the run. A statement attachment without a turnover uses the reported line
 both together use the file. A file without recognisable statement labels asks for a
 turnover instead of guessing a mapping.
 
+A PDF, Word file or screenshot that carries the statements as prose rather than a
+table is read line by line: standard labels and their amounts are paired, dates are
+ignored, the document scale (lakh, crore, million) is applied once, and the current
+and prior columns are read left to right. The extracted text stays on the server; the
+planner receives only the attachment name and a preview.
+
 Every line is a `FIN-*` step with its source, and re-performance must return `exact`.
 Exports carry the three statements, the ratios and the observations in the Analysis
 sheet.
@@ -404,8 +410,9 @@ every document operation and its error paths, planner routing and clarification,
 upload → plan → confirm → trace → re-performance, ownership and typed upload errors.
 Statement coverage adds reported parsing with prior columns and scales, derived totals
 and conflict warnings, the balanced turnover model, every ratio group, assumption and
-period handling, planner clarifications, parameter-sheet edits, the card and the API
-export.
+period handling, statement lines read from table-free PDF and Word text (including a
+printed note column and a stray footer year), planner clarifications, parameter-sheet
+edits, the card and the API export.
 
 ## Layout
 
