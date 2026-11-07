@@ -59,6 +59,9 @@ def _plan_summary(payload: dict[str, Any]) -> None:
     print(f"Status: {payload.get('status')}")
     print(f"Plan:   {payload.get('plan_id')}  ({plan.get('intent')}, confidence {plan.get('confidence')})")
     print(f"Tool:   {plan.get('tool')} {plan.get('tool_version')}")
+    print(f"Planner: {payload.get('planner') or plan.get('planner') or 'deterministic'}")
+    if payload.get("planner_note"):
+        print(f"Note:   {payload['planner_note']}")
     if payload.get("clarification"):
         print(f"Question: {payload['clarification']}")
     sheet = payload.get("parameter_sheet") or []
@@ -85,6 +88,8 @@ def _card_summary(result: dict[str, Any]) -> None:
     print(f"Snapshot: {header.get('snapshot_id')}  {header.get('dataset')}")
     print(f"Period:   {header.get('period_id')}  Plant: {header.get('plant_id')}")
     print(f"Verdict:  {card['verdict']['sentence']}")
+    if result.get("assistant_text"):
+        print(f"Answer:   {result['assistant_text']}")
     facts = card.get("facts") or []
     if facts:
         print("Facts:")
@@ -125,6 +130,11 @@ def main(argv: list[str] | None = None) -> int:
         command = sub.add_parser(name, help=help_text)
         command.add_argument("question", help="Natural-language question, quoted.")
         command.add_argument("--user", default="controller", help="Demo user id (default: controller).")
+        command.add_argument(
+            "--model",
+            default="deterministic",
+            help="Local model id, 'auto', or 'deterministic' (default: deterministic).",
+        )
         command.add_argument("--json", action="store_true", help="Emit the full payload as JSON.")
         if name == "run":
             command.add_argument(
@@ -150,6 +160,9 @@ def main(argv: list[str] | None = None) -> int:
     connectors.add_argument("--json", action="store_true")
     add_storage(connectors)
 
+    models = sub.add_parser("models", help="List free local models served by Ollama.")
+    models.add_argument("--json", action="store_true")
+
     demo = sub.add_parser("demo", help="Print the canonical special-order case.")
     demo.add_argument("--json", action="store_true", help="Emit the full result payload.")
     add_storage(demo)
@@ -170,7 +183,8 @@ def main(argv: list[str] | None = None) -> int:
         orchestrator = _orchestrator()
         user = _user(orchestrator, args.user)
         session_id = orchestrator.create_session(user)["session"]["session_id"]
-        payload = orchestrator.post_message(user, session_id, args.question)
+        model = None if args.model in {"", "deterministic"} else args.model
+        payload = orchestrator.post_message(user, session_id, args.question, model=model)
         if args.command == "ask":
             if args.json:
                 _print(payload)
@@ -199,6 +213,19 @@ def main(argv: list[str] | None = None) -> int:
             _print(result)
         else:
             _card_summary(result)
+        return 0
+
+    if args.command == "models":
+        from costpilot.platform.llm import model_catalog
+
+        catalog = model_catalog()
+        if args.json:
+            _print(catalog)
+        else:
+            print(f"Ollama: {catalog['ollama']} ({'reachable' if catalog['available'] else 'not reachable'})")
+            for row in catalog["models"]:
+                print(f"- {row['id']:<24} {row['provider']:<12} free={row['free']} local={row['local']}")
+            print(f"Default: {catalog['default']}")
         return 0
 
     service = _service()

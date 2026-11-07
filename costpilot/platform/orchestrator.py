@@ -21,6 +21,7 @@ from costpilot.engine.money import display_amount
 from costpilot.engine.narration import fallback_template, render_validated
 from costpilot.engine.trace import Fact
 from costpilot.platform.auth import AuthService, User
+from costpilot.platform.llm import LLMClient, dataset_catalog
 from costpilot.platform.planner import plan_message
 from costpilot.platform.store import PlatformStore
 from costpilot.service import ToolService
@@ -264,9 +265,11 @@ class Orchestrator:
         self,
         service: ToolService,
         auth: AuthService | None = None,
+        llm: LLMClient | None = None,
     ) -> None:
         self.service = service
         self.auth = auth or AuthService()
+        self.llm = llm or LLMClient()
         self.store: PlatformStore = service.store
 
     # ---------- sessions ----------
@@ -324,7 +327,13 @@ class Orchestrator:
 
     # ---------- planning ----------
 
-    def post_message(self, user: User, session_id: str, text: str) -> dict[str, Any]:
+    def post_message(
+        self,
+        user: User,
+        session_id: str,
+        text: str,
+        model: str | None = None,
+    ) -> dict[str, Any]:
         self._session(user, session_id)
         self.auth.require(user, "read")
         text = (text or "").strip()
@@ -335,8 +344,18 @@ class Orchestrator:
                 "Ask about a variance, a special order, ABC, the budget, performance, alerts, or group reporting.",
             )
         self.store.add_message(session_id, "user", text)
-        plan = plan_message(self.service.snapshot, text, session_id=session_id)
+        hints: dict[str, Any] | None = None
+        model_error: str | None = None
+        if model and model != "deterministic":
+            hints = self.llm.interpret(text, dataset_catalog(self.service.snapshot), model=model)
+            if hints is None:
+                model_error = self.llm.last_error or "The local model did not return a usable plan."
+        plan = plan_message(self.service.snapshot, text, session_id=session_id, hints=hints)
         plan["question"] = text
+        if model_error:
+            plan["planner_note"] = (
+                f"{model_error} The deterministic planner handled this question instead."
+            )
 
         confidence = Decimal(str(plan.get("confidence", "0")))
         if confidence < Decimal("0.60") and plan.get("status") != "needs_clarification":
@@ -386,7 +405,14 @@ class Orchestrator:
                 "confidence": plan.get("confidence"),
                 "requires_confirmation": plan.get("requires_confirmation", False),
                 "rationale": plan.get("rationale"),
+                "planner": plan.get("planner") or "deterministic",
+                "planner_reason": plan.get("planner_reason"),
+                "planner_note": plan.get("planner_note"),
+                "model": plan.get("model"),
             },
+            "planner": plan.get("planner") or "deterministic",
+            "model": plan.get("model"),
+            "planner_note": plan.get("planner_note"),
             "parameter_sheet": parameter_sheet,
             "missing": plan.get("missing", []),
             "clarification": plan.get("clarification"),
@@ -462,19 +488,31 @@ class Orchestrator:
                     }
                 )
             if "capacity_state" not in {row["key"] for row in rows}:
+                capacity_default = str(resolved.get("capacity_state", "idle"))
                 rows.append(
                     {
                         "key": "capacity_state",
                         "label": label_map["capacity_state"],
-                        "value": resolved.get("capacity_state", "idle"),
-                        "source": "policy_default",
+                        "value": capacity_default,
+                        "source": "policy_default" if capacity_default == "idle" else "engine_default",
                         "confirm": True,
                         "editable": True,
                     }
                 )
             utilization = _to_decimal(resolved.get("utilization", "0"))
             capacity = str(resolved.get("capacity_state", "idle"))
-            if capacity == "idle" and utilization > Decimal("0.95"):
+            if capacity == "constrained":
+                idle = _to_decimal(resolved.get("idle_capacity_units", "0"))
+                order_units = _to_decimal(resolved.get("order_units", "0"))
+                for row in rows:
+                    if row["key"] == "capacity_state":
+                        row["warning"] = (
+                            f"Spare capacity ({idle:,.0f} units) is below the order "
+                            f"({order_units:,.0f} units), so displaced sales carry an "
+                            "opportunity cost. Set idle capacity only if the plant can absorb the order."
+                        )
+                        row["confirm"] = True
+            elif utilization > Decimal("0.95"):
                 for row in rows:
                     if row["key"] == "capacity_state":
                         row["warning"] = (
@@ -636,6 +674,7 @@ class Orchestrator:
         run_id = (envelope.get("trace_ref") or {}).get("run_id")
         narration = self._narration(plan, envelope)
         card = self._card(plan, envelope, narration, user)
+        assistant_text = self._assistant_text(plan, card, narration)
         self.store.put_object("run_card", run_id, card)
         self.store.put_object(
             "idempotency",
@@ -646,7 +685,7 @@ class Orchestrator:
         self.store.add_message(
             plan["session_id"],
             "assistant",
-            f"{card['verdict']['sentence']} {narration['text']}",
+            assistant_text,
             plan_id=plan_id,
             run_id=run_id,
         )
@@ -655,10 +694,24 @@ class Orchestrator:
             "run_id": run_id,
             "status": "completed",
             "card": card,
+            "assistant_text": assistant_text,
             "card_url": f"/v1/runs/{run_id}",
             "events": f"/v1/runs/{run_id}/events",
             "idempotent": False,
         }
+
+    def _assistant_text(
+        self,
+        plan: dict[str, Any],
+        card: dict[str, Any],
+        narration: dict[str, Any],
+    ) -> str:
+        fallback = f"{card['verdict']['sentence']} {narration['text']}"
+        model = plan.get("model")
+        if not model or model == "deterministic":
+            return fallback
+        text = self.llm.narrate(card, model=model)
+        return text or fallback
 
     def cancel_plan(self, user: User, plan_id: str, reason: str | None = None) -> dict[str, Any]:
         plan = self.store.get_plan(plan_id)
@@ -843,6 +896,7 @@ class Orchestrator:
                 "basis": meta.get("basis") or args.get("basis"),
                 "snapshot_id": self.service.snapshot.snapshot_id,
                 "dataset": self.service.snapshot.dataset_name,
+                "currency": self.service.snapshot.currency,
                 "status": "completed",
             },
             "verdict": {

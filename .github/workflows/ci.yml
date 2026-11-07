@@ -38,3 +38,7 @@ jobs:
         run: python -m costpilot.cli verify
       - name: Connector catalog
         run: python -m costpilot.cli connectors
+      - name: Model catalog (offline)
+        run: python -m costpilot.cli models
+      - name: Deterministic plan
+        run: python -m costpilot.cli ask "Variance for PRD-B at PLT-01 in 2026-09"

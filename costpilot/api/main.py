@@ -5,20 +5,24 @@ from __future__ import annotations
 import csv
 import io
 import json
+import shutil
+import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from costpilot import ENGINE_VERSION, RULEBOOK_VERSION
-from costpilot.data.loader import REQUIRED_FILES
+from costpilot.data import uploads as dataset_uploads
+from costpilot.data.loader import REQUIRED_FILES, load_snapshot
 from costpilot.engine.errors import DomainError
 from costpilot.platform.auth import AuthService, User
 from costpilot.platform.exports import ExportError, export_working_paper
+from costpilot.platform.llm import model_catalog
 from costpilot.platform.orchestrator import Orchestrator
 from costpilot.service import ToolService
 
@@ -59,6 +63,9 @@ UNPROCESSABLE = {
     "CONNECTOR_UNKNOWN",
     "MON_METRIC_UNKNOWN",
     "MON_THRESHOLD_MISSING",
+    "E_MODEL_UNAVAILABLE",
+    "E_DATASET_FORMAT",
+    "SCHEMA_MISMATCH",
 }
 ACTIONS = {
     "E_AUTH_REQUIRED": ["login"],
@@ -81,6 +88,8 @@ ACTIONS = {
     "REGISTRY_PROPOSAL_STATE": ["refresh_registry"],
     "MON_METRIC_UNKNOWN": ["open_alert_builder"],
     "MON_THRESHOLD_MISSING": ["open_alert_builder"],
+    "E_DATASET_FORMAT": ["download_template", "choose_file"],
+    "SCHEMA_MISMATCH": ["download_template", "fix_columns", "reupload"],
 }
 DEFAULT_ACTIONS = ["retry"]
 
@@ -92,6 +101,7 @@ class LoginRequest(BaseModel):
 
 class MessageRequest(BaseModel):
     text: str
+    model: str | None = None
 
 
 class ConfirmRequest(BaseModel):
@@ -269,6 +279,14 @@ def create_app(service: ToolService | None = None, auth: AuthService | None = No
         payload["roles"] = _roles()
         return payload
 
+    @app.get("/v1/models")
+    def models(
+        user: User = Depends(current_user), orch: Orchestrator = Depends(get_orchestrator)
+    ) -> dict[str, Any]:
+        catalog = model_catalog(orch.llm)
+        catalog["planner"] = "AI selects the registered analysis; the rule engine calculates every number."
+        return catalog
+
     @app.get("/v1/registry/rules")
     def registry_rules(
         user: User = Depends(current_user), svc: ToolService = Depends(get_service)
@@ -314,7 +332,7 @@ def create_app(service: ToolService | None = None, auth: AuthService | None = No
         user: User = Depends(current_user),
         orch: Orchestrator = Depends(get_orchestrator),
     ) -> dict[str, Any]:
-        return orch.post_message(user, session_id, payload.text)
+        return orch.post_message(user, session_id, payload.text, model=payload.model)
 
     @app.post("/v1/sessions/{session_id}/close")
     def close_session(
@@ -444,18 +462,11 @@ def create_app(service: ToolService | None = None, auth: AuthService | None = No
 
     @app.get("/v1/datasets")
     def datasets(user: User = Depends(current_user), svc: ToolService = Depends(get_service)) -> dict[str, Any]:
-        snapshot = svc.snapshot
         return {
-            "datasets": [
-                {
-                    "dataset_id": snapshot.snapshot_id,
-                    "name": snapshot.dataset_name,
-                    "manifest_hash": snapshot.manifest_hash,
-                    "row_counts": snapshot.row_counts,
-                    "currency": snapshot.currency,
-                    "current": True,
-                }
-            ]
+            "datasets": svc.datasets(),
+            "current": svc.dataset_info(),
+            "accepted": [".xlsx", ".zip"],
+            "template": "/v1/datasets/workbook-template",
         }
 
     @app.get("/v1/datasets/{dataset_id}/quality")
@@ -552,6 +563,117 @@ def create_app(service: ToolService | None = None, auth: AuthService | None = No
                 f"Add the missing columns to {name}: {', '.join(missing)}.",
                 "Re-run the validation, then load the complete snapshot through the ingestion worker.",
             ],
+        }
+
+    @app.get("/v1/datasets/workbook-template")
+    def workbook_template(user: User = Depends(current_user)) -> Response:
+        return Response(
+            content=dataset_uploads.workbook_bytes(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="costpilot-dataset-template.xlsx"'},
+        )
+
+    @app.post("/v1/datasets/upload")
+    async def upload_dataset(
+        file: UploadFile = File(...),
+        name: str | None = Form(None),
+        user: User = Depends(current_user),
+        svc: ToolService = Depends(get_service),
+    ) -> dict[str, Any]:
+        if not user.can("run"):
+            raise DomainError(
+                "E_AUTH_SCOPE",
+                "This role cannot load a dataset.",
+                "Ask an analyst or controller to upload the workbook, or sign in as analyst.",
+            )
+        raw = await file.read()
+        workdir = Path(tempfile.mkdtemp(prefix="costpilot-upload-"))
+        try:
+            try:
+                summary = dataset_uploads.extract(raw, file.filename or "", workdir)
+            except ValueError as exc:
+                raise DomainError(
+                    "E_DATASET_FORMAT",
+                    str(exc),
+                    "Download the workbook template at GET /v1/datasets/workbook-template, "
+                    "fill one sheet per table, and upload the .xlsx or a .zip of CSVs.",
+                ) from exc
+            blocking = (
+                summary["missing_required"]
+                or summary["missing_columns"]
+                or summary["empty_required"]
+            )
+            if blocking:
+                details = []
+                if summary["missing_required"]:
+                    details.append(
+                        "Missing tables: " + ", ".join(summary["missing_required"]) + "."
+                    )
+                for table, columns in (summary["missing_columns"] or {}).items():
+                    details.append(f"{table} is missing columns: {', '.join(columns)}.")
+                if summary["empty_required"]:
+                    details.append(
+                        "No header row: " + ", ".join(summary["empty_required"]) + "."
+                    )
+                raise DomainError(
+                    "SCHEMA_MISMATCH",
+                    "The workbook is missing required data. " + " ".join(details),
+                    " ".join(dataset_uploads.remediation(summary)),
+                )
+            dataset_name = (name or Path(file.filename or "Uploaded dataset").stem).strip()
+            dataset_name = dataset_name[:120] or "Uploaded dataset"
+            try:
+                snapshot = load_snapshot(workdir, dataset_name=dataset_name)
+            except DomainError as exc:
+                raise DomainError(
+                    exc.code,
+                    exc.message,
+                    " ".join(dataset_uploads.remediation(summary)),
+                ) from exc
+            blocked = [gate for gate in snapshot.gates if gate.status == "block"]
+            if blocked:
+                details = " ".join(
+                    f"{gate.id} {gate.name}: {gate.detail}." for gate in blocked
+                )
+                fixes = " ".join(
+                    gate.remediation for gate in blocked if gate.remediation
+                )
+                raise DomainError(
+                    "E_DATA_QUALITY",
+                    "The workbook loaded but failed a blocking ingestion gate, so it was "
+                    "not activated. " + details,
+                    fixes or "Correct the rows named above and upload the workbook again.",
+                )
+            info = svc.activate_snapshot(
+                snapshot,
+                path=workdir,
+                uploaded_by=user.user_id,
+                summary={
+                    "files": summary["files"],
+                    "rows": summary["row_counts"],
+                    "ignored_sheets": summary["ignored_sheets"],
+                },
+            )
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+        capability = svc.capability()
+        gates = [
+            gate.to_dict() if hasattr(gate, "to_dict") else gate for gate in svc.snapshot.gates
+        ]
+        return {
+            "activated": True,
+            "dataset": svc.dataset_info(),
+            "previous": info.get("previous"),
+            "activated_at": info.get("uploaded_at"),
+            "gates": gates,
+            "remediation": _gate_remediation(svc.snapshot.gates),
+            "capability": {
+                "analysis_ready": capability.get("analysis_ready", []),
+                "analysis_unavailable": capability.get("analysis_unavailable", []),
+                "demo_defaults": capability.get("demo_defaults", {}),
+            },
+            "next": "Ask a question in the chat to analyse the new snapshot.",
         }
 
     # ---------- connectors and mappings ----------

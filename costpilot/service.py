@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,13 @@ from costpilot.audit import AuditStore, compare_results
 from costpilot.connectors import CONNECTORS, MappingRegistry, run_connector
 from costpilot.data.capability import build_capability
 from costpilot.data.loader import Snapshot, load_snapshot
+from costpilot.data.uploads import (
+    active_dataset,
+    default_datasets_root,
+    list_datasets,
+    record_dataset,
+    set_active,
+)
 from costpilot.engine import abc, budgets, group, monitoring, performance
 from costpilot.engine.costing import bridge
 from costpilot.engine.decisions import SUPPORTED, run_decision
@@ -29,6 +37,10 @@ def default_fixtures_path() -> Path:
     return Path(os.environ.get("COSTPILOT_FIXTURES", ROOT / "fixtures")).expanduser().resolve()
 
 
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
 class ToolService:
     def __init__(
         self,
@@ -43,12 +55,79 @@ class ToolService:
         )
         self.mappings = MappingRegistry(snapshot, self.store)
         self.registry = RegistryService(snapshot, self.store)
+        self.datasets_root = default_datasets_root()
+        self.dataset_source = "bundled"
 
     @classmethod
     def from_env(cls) -> ToolService:
-        snapshot = load_snapshot(default_fixtures_path())
+        datasets_root = default_datasets_root()
+        explicit_fixtures = os.environ.get("COSTPILOT_FIXTURES")
+        active = None if explicit_fixtures else active_dataset(datasets_root)
+        snapshot = None
+        source = "bundled"
+        if active:
+            try:
+                snapshot = load_snapshot(active["path"], dataset_name=active["name"])
+                source = "upload"
+            except Exception:
+                snapshot = None
+        if snapshot is None:
+            snapshot = load_snapshot(default_fixtures_path())
         db_path = os.environ.get("COSTPILOT_AUDIT_DB", str(ROOT / "data" / "audit.db"))
-        return cls(snapshot, AuditStore(db_path))
+        service = cls(snapshot, AuditStore(db_path))
+        service.dataset_source = source
+        return service
+
+    # ---------- datasets ----------
+
+    def dataset_info(self) -> dict[str, Any]:
+        snapshot = self.snapshot
+        return {
+            "dataset_id": snapshot.snapshot_id,
+            "name": snapshot.dataset_name,
+            "manifest_hash": snapshot.manifest_hash,
+            "row_counts": snapshot.row_counts,
+            "currency": snapshot.currency,
+            "source": self.dataset_source,
+            "current": True,
+        }
+
+    def datasets(self) -> list[dict[str, Any]]:
+        rows = list_datasets(self.datasets_root)
+        current = self.snapshot.snapshot_id
+        if not any(row.get("dataset_id") == current for row in rows):
+            rows.insert(0, self.dataset_info())
+        return [dict(row, current=row.get("dataset_id") == current) for row in rows]
+
+    def activate_snapshot(
+        self,
+        snapshot: Snapshot,
+        *,
+        path: Path | None = None,
+        source: str = "upload",
+        uploaded_by: str | None = None,
+        summary: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Switch the live snapshot, then persist the active pointer and index entry."""
+        from costpilot.data.uploads import save_dataset
+
+        previous = self.snapshot.snapshot_id
+        stored_path = path
+        if path is not None:
+            stored_path = save_dataset(path, self.datasets_root, snapshot.snapshot_id)
+            snapshot = load_snapshot(stored_path, dataset_name=snapshot.dataset_name)
+            set_active(self.datasets_root, stored_path, snapshot.dataset_name)
+
+        self.snapshot = snapshot
+        self.dataset_source = source
+        self.mappings = MappingRegistry(snapshot, self.store)
+        self.registry = RegistryService(snapshot, self.store)
+
+        entry = dict(self.dataset_info(), uploaded_by=uploaded_by, uploaded_at=_now_iso())
+        if summary:
+            entry["upload"] = summary
+        record_dataset(self.datasets_root, entry)
+        return {"previous": previous, **entry}
 
     # ---------- metadata ----------
 
@@ -119,9 +198,10 @@ class ToolService:
         fill("variable_manufacturing_cost", standard.variable_manufacturing_cost, "standard_cost", "Variable manufacturing cost per unit")
         fill("regular_price", standard.price, "standard_cost", "Regular selling price")
         fill("regular_variable_selling_cost", standard.variable_selling, "standard_cost", "Regular variable selling cost")
+        idle_units = max(Decimal("0"), standard.capacity_units - actual.output_units)
         fill(
             "idle_capacity_units",
-            max(Decimal("0"), standard.capacity_units - actual.output_units),
+            idle_units,
             "snapshot",
             "Idle capacity units",
         )
@@ -131,7 +211,11 @@ class ToolService:
             "snapshot",
             "Current utilization",
         )
-        resolved.setdefault("capacity_state", "idle")
+        order_units = Decimal(str(resolved.get("order_units") or "0"))
+        resolved.setdefault(
+            "capacity_state",
+            "idle" if idle_units >= order_units else "constrained",
+        )
         resolved.setdefault("variable_selling_cost_avoided", True)
         resolved.setdefault("incremental_fixed_cost", "0")
         resolved.setdefault("displaced_units", None)
@@ -929,7 +1013,12 @@ class ToolService:
         user: Any | None = None,
         plan_id: str | None = None,
     ) -> dict[str, Any]:
-        payload = run_connector(self.snapshot, self.mappings, name)
+        payload = run_connector(
+            self.snapshot,
+            self.mappings,
+            name,
+            extract_root=default_fixtures_path(),
+        )
         run_ref = None
         if record:
             run_ref = self.audit.append(

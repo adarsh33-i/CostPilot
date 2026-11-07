@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from costpilot.connectors.base import ConnectorResult, validate_connector
@@ -23,6 +24,8 @@ def run_connector(
     snapshot: Snapshot,
     registry: MappingRegistry,
     name: str,
+    *,
+    extract_root: Path | None = None,
 ) -> dict[str, Any]:
     connector_class = CONNECTORS.get(name)
     if connector_class is None:
@@ -32,7 +35,8 @@ def run_connector(
             "Use one of: " + ", ".join(sorted(CONNECTORS)) + ".",
         )
     connector = connector_class()
-    root = snapshot.root
+    # Connector extracts ship with the product, not with each uploaded dataset.
+    root = extract_root or snapshot.root
     rows = connector.extract(root)
     result = validate_connector(
         snapshot,

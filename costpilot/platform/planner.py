@@ -125,8 +125,13 @@ def plan_message(
     text: str,
     *,
     session_id: str | None = None,
+    hints: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     lowered = text.lower().strip()
+    hints = hints or {}
+    slots = hints.get("slots") if isinstance(hints.get("slots"), dict) else {}
+    hint_confidence = str(hints.get("confidence") or "0.8")
+    hint_evidence = f"model extraction ({hints.get('model') or 'local model'})"
     defaults_period = next(
         (row["period_id"] for row in reversed(snapshot.periods) if row.get("status") != "closed"),
         snapshot.periods[-1]["period_id"] if snapshot.periods else "",
@@ -139,7 +144,22 @@ def plan_message(
 
     period_match = PERIOD.search(text)
     period_id = period_match.group(1) if period_match else defaults_period
-    if not period_match:
+    hinted_period = slots.get("period_id")
+    if hinted_period and (
+        not snapshot.periods or hinted_period in {row["period_id"] for row in snapshot.periods}
+    ):
+        period_id = hinted_period
+        assumptions.append(
+            {
+                "key": "period_id",
+                "text": f"Period {period_id} selected by the model.",
+                "source": "user_implied",
+                "evidence": hint_evidence,
+                "confidence": hint_confidence,
+                "confirm": False,
+            }
+        )
+    elif not period_match:
         assumptions.append(
             {
                 "key": "period_id",
@@ -161,7 +181,22 @@ def plan_message(
 
     plant_id: str | None = None
     plant_match = PLANT.search(text)
-    if plant_match:
+    hinted_plant = slots.get("plant_id")
+    if hinted_plant and (
+        not snapshot.plants or hinted_plant in {row["plant_id"] for row in snapshot.plants}
+    ):
+        plant_id = hinted_plant
+        assumptions.append(
+            {
+                "key": "plant_id",
+                "text": f"Plant {plant_id} selected by the model.",
+                "source": "user_implied",
+                "evidence": hint_evidence,
+                "confidence": hint_confidence,
+                "confirm": False,
+            }
+        )
+    elif plant_match:
         plant_id = plant_match.group(1).upper()
     else:
         for city, code in CITY_PLANTS.items():
@@ -193,7 +228,22 @@ def plan_message(
 
     product_id: str | None = None
     product_match = PRODUCT.search(text)
-    if product_match:
+    hinted_product = slots.get("product_id")
+    if hinted_product and (
+        not snapshot.products or hinted_product in {row["product_id"] for row in snapshot.products}
+    ):
+        product_id = hinted_product
+        assumptions.append(
+            {
+                "key": "product_id",
+                "text": f"Product {product_id} selected by the model.",
+                "source": "user_implied",
+                "evidence": hint_evidence,
+                "confidence": hint_confidence,
+                "confirm": False,
+            }
+        )
+    elif product_match:
         product_id = product_match.group(1).upper()
     else:
         for name, code in PRODUCT_NAMES.items():
@@ -218,7 +268,22 @@ def plan_message(
         )
     customer_match = CUSTOMER.search(text)
     customer_id = customer_match.group(1).upper() if customer_match else None
-    if customer_id:
+    hinted_customer = slots.get("customer_id")
+    if hinted_customer and (
+        not snapshot.customers or hinted_customer in snapshot.customers
+    ):
+        customer_id = hinted_customer
+        assumptions.append(
+            {
+                "key": "customer_id",
+                "text": f"Customer scope is {customer_id}, selected by the model.",
+                "source": "user_implied",
+                "evidence": hint_evidence,
+                "confidence": hint_confidence,
+                "confirm": False,
+            }
+        )
+    elif customer_id:
         assumptions.append(
             {
                 "key": "customer_id",
@@ -252,6 +317,19 @@ def plan_message(
             value = "-" + value
         overlay[key] = format(Decimal(value) / Decimal("100"), "f")
         overlay_percent[key] = value
+    hinted_overlay = slots.get("overlay")
+    if isinstance(hinted_overlay, dict):
+        for driver, percent in hinted_overlay.items():
+            if driver not in {"volume", "price", "material_price", "labour_rate", "overhead"}:
+                continue
+            try:
+                number = Decimal(str(percent))
+            except Exception:
+                continue
+            if abs(number) > 100:
+                continue
+            overlay[driver] = format(number / Decimal("100"), "f")
+            overlay_percent[driver] = format(number, "f")
     if overlay:
         assumptions.append(
             {
@@ -269,6 +347,8 @@ def plan_message(
 
     materiality_match = MATERIALITY.search(text)
     materiality = materiality_match.group(1).replace(",", "") if materiality_match else "50000"
+    if slots.get("materiality"):
+        materiality = str(slots["materiality"])
 
     tier_one = _tier_one(lowered)
     tier_two = _tier_two(lowered)
@@ -298,6 +378,34 @@ def plan_message(
         confidence = Decimal("0.4")
     else:
         intent = candidates[0]
+
+    hinted_intent = hints.get("intent")
+    known_intents = {
+        "variance_analysis", "costing_bridge", "special_order", "abc_profitability",
+        "tdabc", "customer_profitability", "budget_chain", "budget_scenario",
+        "rolling_forecast", "forecast_quality", "performance_eval", "monitoring",
+        "group_report", "connector_preview", "describe_dataset", "clarify",
+    }
+    if (
+        hinted_intent in known_intents
+        and Decimal(hint_confidence) >= Decimal("0.55")
+    ):
+        intent = hinted_intent
+        if intent == "clarify":
+            clarification = clarification or {
+                "question": (
+                    "I could not choose one analysis confidently. Which result do you want: "
+                    "variance, profitability, budget, performance, alerts, group or a connector preview?"
+                ),
+                "options": [
+                    "Variance analysis",
+                    "ABC or customer profitability",
+                    "Budget or rolling forecast",
+                    "Performance, alerts or group",
+                ],
+            }
+        else:
+            clarification = None
 
     tool_by_intent = {
         "describe_dataset": "describe_dataset",
@@ -339,6 +447,9 @@ def plan_message(
         fixed = re.search(r"fixed cost[^0-9]{0,20}([\d,]+(?:\.\d+)?)", text, re.IGNORECASE)
         if fixed:
             arguments["incremental_fixed_cost"] = fixed.group(1).replace(",", "")
+        for key in ("order_units", "order_price", "incremental_fixed_cost"):
+            if slots.get(key):
+                arguments[key] = str(slots[key])
         if "constrained" in lowered or "full capacity" in lowered:
             arguments["capacity_state"] = "constrained"
         arguments["confirmed"] = False
@@ -360,30 +471,36 @@ def plan_message(
         arguments.update(
             {
                 "period_id": period_id,
-                "division_id": division_match.group(1).upper() if division_match else "DIV-01",
+                "division_id": slots.get("division_id")
+                or (division_match.group(1).upper() if division_match else "DIV-01"),
             }
         )
     if intent == "monitoring":
         arguments["period_id"] = period_id
         from costpilot.engine.monitoring import METRIC_ALIASES
 
-        rule_text = text.strip()
-        if ":" in rule_text:
-            rule_text = rule_text.rsplit(":", 1)[1].strip()
-        names_metric = any(phrase in rule_text.lower() for phrase in METRIC_ALIASES)
-        if not names_metric:
-            names_metric = any(phrase in lowered for phrase in METRIC_ALIASES)
-        arguments["rules"] = [rule_text] if names_metric else []
+        hinted_rules = slots.get("rules")
+        if hinted_rules:
+            arguments["rules"] = [str(rule) for rule in hinted_rules]
+        else:
+            rule_text = text.strip()
+            if ":" in rule_text:
+                rule_text = rule_text.rsplit(":", 1)[1].strip()
+            names_metric = any(phrase in rule_text.lower() for phrase in METRIC_ALIASES)
+            if not names_metric:
+                names_metric = any(phrase in lowered for phrase in METRIC_ALIASES)
+            arguments["rules"] = [rule_text] if names_metric else []
         arguments["materiality"] = materiality
     if intent == "group_report":
         arguments["period_id"] = period_id
     if intent == "connector_preview":
+        chosen_connector = slots.get("connector")
         for name in ("netsuite", "sap", "flatfile"):
-            if name in lowered:
+            if chosen_connector == name or (not chosen_connector and name in lowered):
                 arguments["connector"] = name
                 break
         else:
-            arguments["connector"] = "netsuite"
+            arguments["connector"] = chosen_connector or "netsuite"
     if intent == "explain_run":
         if run_match:
             arguments["run_id"] = run_match.group(1)
@@ -461,6 +578,9 @@ def plan_message(
         "tool": tool,
         "tool_version": "1.0.0",
         "planner_version": PLANNER_VERSION,
+        "planner": hints.get("planner") or "deterministic",
+        "planner_reason": str(hints.get("reason") or "")[:400],
+        "model": hints.get("model"),
         "arguments": _serialize(arguments),
         "assumptions": assumptions,
         "missing": missing,

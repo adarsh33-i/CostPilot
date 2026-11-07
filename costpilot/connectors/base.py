@@ -79,7 +79,7 @@ def read_csv(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         raise DomainError(
             "CONNECTOR_EXTRACT_MISSING",
-            f"Connector extract not found at {path.name}.",
+            f"Connector extract not found at {path}.",
             "Place the read-only extract in fixtures/connectors or fix the connector path.",
         )
     with path.open(newline="") as handle:
