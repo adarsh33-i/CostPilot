@@ -24,6 +24,7 @@ from costpilot.data.uploads import (
 )
 from costpilot.engine import abc, budgets, group, monitoring, performance
 from costpilot.engine import documents as document_engine
+from costpilot.engine import statements as statement_engine
 from costpilot.engine.costing import bridge
 from costpilot.engine.decisions import SUPPORTED, run_decision
 from costpilot.engine.errors import DomainError
@@ -214,6 +215,65 @@ class ToolService:
         return self._seal(
             tool="run_attachment_analysis",
             intent="attachment_analysis",
+            arguments={key: value for key, value in arguments.items() if value is not None},
+            result=result,
+            question=question,
+            user=user,
+            plan_id=plan_id,
+            record=record,
+        )
+
+    def run_financial_statements(
+        self,
+        *,
+        attachment_id: str | None = None,
+        turnover: Any | None = None,
+        prior_turnover: Any | None = None,
+        currency: str = "INR",
+        period: str | None = None,
+        mode: str = "auto",
+        assumptions: dict[str, Any] | None = None,
+        assumption_sources: dict[str, str] | None = None,
+        question: str | None = None,
+        record: bool = True,
+        user: Any | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Build statements and ratios from a file or a stated turnover."""
+        attachment = None
+        if attachment_id:
+            attachment = self.store.get_object("attachment", attachment_id)
+            if attachment is None:
+                raise DomainError(
+                    "E_ATTACHMENT_NOT_FOUND",
+                    f"Attachment {attachment_id} was not found.",
+                    "Attach the statement file again and ask in the same message.",
+                )
+        result = statement_engine.run_financial_statements(
+            attachment,
+            turnover=turnover,
+            prior_turnover=prior_turnover,
+            currency=currency,
+            period=period,
+            mode=mode,
+            assumptions=assumptions or {},
+            assumption_sources=assumption_sources or {},
+        )
+        arguments = {
+            "attachment_id": attachment_id,
+            "attachment_name": attachment.get("name") if attachment else None,
+            "attachment_sha256": attachment.get("sha256") if attachment else None,
+            "turnover": str(turnover) if turnover is not None else None,
+            "prior_turnover": str(prior_turnover) if prior_turnover is not None else None,
+            "currency": currency,
+            "period": period,
+            "mode": mode,
+            "assumptions": {str(k): str(v) for k, v in (assumptions or {}).items()},
+            "assumption_sources": dict(assumption_sources or {}),
+        }
+        return self._seal(
+            tool="run_financial_statements",
+            intent="financial_statements",
             arguments={key: value for key, value in arguments.items() if value is not None},
             result=result,
             question=question,
@@ -1375,6 +1435,18 @@ class ToolService:
                 plant_id=plant,
                 overlay=arguments.get("overlay") or {},
                 label=arguments.get("label", "Scenario"),
+                record=False,
+            )
+        if tool == "run_financial_statements":
+            return self.run_financial_statements(
+                attachment_id=arguments.get("attachment_id"),
+                turnover=arguments.get("turnover"),
+                prior_turnover=arguments.get("prior_turnover"),
+                currency=arguments.get("currency", "INR"),
+                period=arguments.get("period"),
+                mode=arguments.get("mode", "auto"),
+                assumptions=arguments.get("assumptions") or {},
+                assumption_sources=arguments.get("assumption_sources") or {},
                 record=False,
             )
         if tool == "run_rolling_forecast":

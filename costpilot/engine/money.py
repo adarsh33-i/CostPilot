@@ -129,6 +129,10 @@ def display_amount(value: Decimal, unit: str) -> str:
         return fmt_pct(value)
     if unit == "ratio":
         return fmt_pct(value * HUNDRED)
+    if unit == "times":
+        return f"{quantize(value, PCT_QUANT):,.2f}x"
+    if unit == "days":
+        return f"{quantize(value, Decimal('0.1')):,.1f} days"
     if unit == "score":
         return f"{quantize(value, PCT_QUANT):,.2f}"
     if unit.endswith("/unit") or unit.endswith("/hour") or unit.endswith("/kg"):

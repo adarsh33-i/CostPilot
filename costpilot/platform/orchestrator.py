@@ -23,7 +23,7 @@ from costpilot.engine.narration import fallback_template, render_validated
 from costpilot.engine.trace import Fact
 from costpilot.platform.auth import AuthService, User
 from costpilot.platform.llm import LLMClient, dataset_catalog
-from costpilot.platform.planner import plan_message
+from costpilot.platform.planner import STATEMENT_SHARE_KEYS, parse_amount, plan_message
 from costpilot.platform.store import PlatformStore
 from costpilot.service import ToolService
 
@@ -32,6 +32,7 @@ READ_ONLY_INTENTS = {"describe_dataset", "audit_verify", "explain_run", "connect
 INTENT_LABELS = {
     "describe_dataset": "Dataset capability",
     "attachment_analysis": "Attached document",
+    "financial_statements": "Financial statements and ratios",
     "variance_analysis": "Variance analysis",
     "costing_bridge": "Variable-to-absorption bridge",
     "special_order": "Special order",
@@ -77,6 +78,13 @@ LABELS = {
     "query": "Search term",
     "limit": "Row limit",
     "direction": "Sort direction",
+    "turnover": "Annual turnover",
+    "prior_turnover": "Prior-year turnover",
+    "mode": "Statement source",
+    "currency": "Currency",
+    "period": "Statement period",
+    "assumptions": "Modelling assumptions",
+    "assumption_sources": "Assumption sources",
 }
 SUGGESTIONS = {
     "special_order": [
@@ -148,6 +156,11 @@ SUGGESTIONS = {
         "Show the rows behind this figure.",
         "Compare two columns in the file.",
         "Which rows are highest for this column?",
+    ],
+    "financial_statements": [
+        "Run the ratio analysis on the prior year too.",
+        "What happens if gross margin rises 2 percentage points?",
+        "Show the full audit trace for this run.",
     ],
     "variance": [
         "Show the audit trace.",
@@ -258,6 +271,47 @@ def _to_decimal(value: Any) -> Decimal:
         return Decimal(str(value))
     except (InvalidOperation, TypeError):
         return Decimal("0")
+
+
+def _normalize_statement_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Accept scaled amounts and percentages from parameter-sheet edits."""
+    normalized = dict(arguments)
+    for key in ("turnover", "prior_turnover"):
+        value = normalized.get(key)
+        if value in (None, ""):
+            continue
+        parsed = parse_amount(str(value))
+        if parsed is None:
+            raise DomainError(
+                "E_PLAN_EDIT",
+                f"{key.replace('_', ' ').title()} is not a valid amount.",
+                "Send a positive number, for example 12000000 or 12 crore.",
+            )
+        normalized[key] = parsed
+    assumptions = normalized.get("assumptions")
+    if isinstance(assumptions, dict):
+        cleaned: dict[str, str] = {}
+        sources = dict(normalized.get("assumption_sources") or {})
+        for key, raw in assumptions.items():
+            text = str(raw).strip()
+            percent = text.endswith("%")
+            if percent:
+                text = text[:-1].strip()
+            try:
+                number = Decimal(text.replace(",", ""))
+            except (InvalidOperation, ValueError) as exc:
+                raise DomainError(
+                    "E_PLAN_EDIT",
+                    f"The assumption {key} is not a number.",
+                    "Send shares as a percentage (45%) and day counts as a number (45).",
+                ) from exc
+            if percent or (key in STATEMENT_SHARE_KEYS and number > 1):
+                number = number / Decimal("100")
+            cleaned[str(key)] = format(number, "f")
+            sources.setdefault(str(key), "user_explicit")
+        normalized["assumptions"] = cleaned
+        normalized["assumption_sources"] = sources
+    return normalized
 
 
 def _composite_template(intent: str, result: dict[str, Any]) -> str:
@@ -633,6 +687,90 @@ class Orchestrator:
                         row["confirm"] = True
             return rows
 
+        if plan.get("intent") == "financial_statements":
+            sources = arguments.get("assumption_sources") or {}
+            currency = str(arguments.get("currency", "INR"))
+            if arguments.get("attachment_id"):
+                record = self.service.attachment(str(arguments["attachment_id"]))
+                rows.append(
+                    {
+                        "key": "attachment_id",
+                        "label": label_map["attachment_id"],
+                        "value": record.get("name") if record else arguments["attachment_id"],
+                        "source": assumptions.get("attachment_id", {}).get("source", "lookup"),
+                        "confirm": False,
+                        "editable": False,
+                    }
+                )
+            for key in ("turnover", "prior_turnover"):
+                value = arguments.get(key)
+                if value in (None, ""):
+                    continue
+                rows.append(
+                    {
+                        "key": key,
+                        "label": label_map[key],
+                        "value": display_amount(_to_decimal(value), currency),
+                        "source": assumptions.get(key, {}).get("source", "user_explicit"),
+                        "confirm": False,
+                        "editable": True,
+                    }
+                )
+            mode = str(arguments.get("mode", "auto"))
+            rows.append(
+                {
+                    "key": "mode",
+                    "label": label_map["mode"],
+                    "value": {
+                        "auto": "Reported file if present, else modelled from turnover",
+                        "reported": "Reported statements from the file",
+                        "model": "Modelled from the stated turnover",
+                    }.get(mode, mode),
+                    "source": "engine_default",
+                    "confirm": mode == "auto",
+                    "editable": True,
+                }
+            )
+            rows.append(
+                {
+                    "key": "currency",
+                    "label": label_map["currency"],
+                    "value": currency,
+                    "source": assumptions.get("currency", {}).get("source", "engine_default"),
+                    "confirm": False,
+                    "editable": True,
+                }
+            )
+            if arguments.get("period"):
+                rows.append(
+                    {
+                        "key": "period",
+                        "label": label_map["period"],
+                        "value": arguments["period"],
+                        "source": assumptions.get("period", {}).get("source", "user_explicit"),
+                        "confirm": False,
+                        "editable": True,
+                    }
+                )
+            for key, value in (arguments.get("assumptions") or {}).items():
+                number = _to_decimal(value)
+                shown = (
+                    f"{number * 100:.1f}%"
+                    if key in STATEMENT_SHARE_KEYS
+                    else f"{number:.0f} days"
+                )
+                rows.append(
+                    {
+                        "key": f"assumptions.{key}",
+                        "label": key.replace("_", " ").title(),
+                        "value": shown,
+                        "source": sources.get(key, "user_explicit"),
+                        "confirm": False,
+                        "editable": True,
+                    }
+                )
+            return rows
+
         for key, value in arguments.items():
             if key in {"confirmed", "decision_type"}:
                 continue
@@ -771,6 +909,8 @@ class Orchestrator:
             )
         if plan.get("intent") == "special_order":
             proposed_arguments["confirmed"] = True
+        if plan.get("intent") == "financial_statements":
+            proposed_arguments = _normalize_statement_arguments(proposed_arguments)
         if plan.get("intent") == "budget_scenario" and "overlay" not in proposed_arguments:
             raise DomainError(
                 "E_ASSUMPTION_UNCONFIRMED",
@@ -874,6 +1014,19 @@ class Orchestrator:
                 query=args.get("query"),
                 limit=int(args.get("limit", 5)),
                 direction=str(args.get("direction", "top")),
+                **common,
+            )
+
+        if intent == "financial_statements":
+            return svc.run_financial_statements(
+                attachment_id=args.get("attachment_id"),
+                turnover=args.get("turnover"),
+                prior_turnover=args.get("prior_turnover"),
+                currency=str(args.get("currency", "INR")),
+                period=args.get("period"),
+                mode=str(args.get("mode", "auto")),
+                assumptions=args.get("assumptions") or {},
+                assumption_sources=args.get("assumption_sources") or {},
                 **common,
             )
 
@@ -1011,6 +1164,10 @@ class Orchestrator:
                 decision = "adverse"
             elif "both favourable" in verdict_text:
                 decision = "favorable"
+        if intent == "financial_statements":
+            headline = meta.get("net_income") or result.get("value")
+            if headline is not None:
+                decision = "favorable" if _to_decimal(headline) > 0 else "adverse"
         tables = self._tables(intent, result)
         facts = [
             {
@@ -1029,7 +1186,12 @@ class Orchestrator:
             "question": plan.get("question"),
             "header": {
                 "question": plan.get("question"),
-                "period_id": meta.get("period_id") or args.get("period_id"),
+                "period_id": (
+                    meta.get("period_id")
+                    or meta.get("period")
+                    or args.get("period_id")
+                    or args.get("period")
+                ),
                 "plant_id": meta.get("plant_id") or args.get("plant_id") or "ALL",
                 "product_id": meta.get("product_id") or args.get("product_id") or "ALL",
                 "customer_id": meta.get("customer_id") or args.get("customer_id"),
@@ -1037,9 +1199,12 @@ class Orchestrator:
                 "basis": meta.get("basis") or args.get("basis"),
                 "attachment_id": meta.get("attachment_id") or args.get("attachment_id"),
                 "attachment_name": meta.get("attachment_name"),
+                "prior_period": meta.get("prior_period"),
+                "statement_periods": meta.get("statement_periods") or [],
+                "statement_mode": meta.get("mode"),
                 "snapshot_id": self.service.snapshot.snapshot_id,
                 "dataset": self.service.snapshot.dataset_name,
-                "currency": self.service.snapshot.currency,
+                "currency": meta.get("currency") or self.service.snapshot.currency,
                 "status": "completed",
             },
             "verdict": {
@@ -1093,9 +1258,45 @@ class Orchestrator:
                     }
                 )
 
-        if intent == "special_order" or result.get("steps"):
-            if result.get("steps"):
+        if intent == "financial_statements":
+            statements = meta.get("statements") or {}
+            for key, title in (
+                ("income", "Income statement"),
+                ("balance", "Balance sheet"),
+                ("cashflow", "Cash flow statement"),
+            ):
                 add(
+                    f"statement_{key}",
+                    title,
+                    statements.get(key) or [],
+                    [
+                        {"key": "label", "label": "Line", "type": "text"},
+                        {"key": "display", "label": "Current", "type": "text"},
+                        {"key": "prior_display", "label": "Prior", "type": "text"},
+                        {"key": "rule", "label": "Rule", "type": "text"},
+                    ],
+                )
+            add(
+                "ratios",
+                "Ratio analysis",
+                meta.get("ratios") or [],
+                [
+                    {"key": "name", "label": "Ratio", "type": "text"},
+                    {"key": "display", "label": "Current", "type": "text"},
+                    {"key": "prior_display", "label": "Prior", "type": "text"},
+                    {"key": "rule", "label": "Rule", "type": "text"},
+                    {"key": "formula", "label": "Formula", "type": "text"},
+                ],
+            )
+            add(
+                "observations",
+                "What the numbers show",
+                [{"note": note} for note in (meta.get("observations") or [])],
+                [{"key": "note", "label": "Observation", "type": "text"}],
+            )
+
+        if intent != "financial_statements" and result.get("steps"):
+            add(
                     "steps",
                     "Calculation chain",
                     [

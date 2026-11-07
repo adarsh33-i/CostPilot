@@ -163,9 +163,13 @@ def export_xlsx(payload: dict[str, Any]) -> bytes:
         ("Verdict", card.get("verdict", {}).get("sentence")),
     ]
     header = card.get("header", {}) or {}
-    for key in ("period_id", "plant_id", "product_id", "division_id", "basis"):
+    for key in (
+        "period_id", "prior_period", "statement_mode", "currency",
+        "plant_id", "product_id", "division_id", "basis",
+    ):
         if header.get(key):
-            rows.append((key.replace("_id", "").replace("_", " ").title(), header[key]))
+            label = "Statement source" if key == "statement_mode" else key
+            rows.append((label.replace("_id", "").replace("_", " ").title(), header[key]))
     for index, (label, value) in enumerate(rows, start=4):
         summary.cell(row=index, column=1, value=safe_text(label)).font = Font(bold=True)
         summary.cell(row=index, column=2, value=safe_text(value))

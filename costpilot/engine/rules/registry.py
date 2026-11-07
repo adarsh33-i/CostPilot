@@ -52,5 +52,5 @@ def all_rules() -> list[Rule]:
 
 
 def registry_version() -> int:
-    # Attachment analysis additions bump the catalogue to version 3.
-    return 3
+    # Financial statement and ratio analysis bump the catalogue to version 4.
+    return 4

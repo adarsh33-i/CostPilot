@@ -295,6 +295,40 @@ curl -s -X POST "http://127.0.0.1:8000/v1/sessions/$SESSION/messages" \
   -d '{"text":"What is the difference between total Actual and Budget in the attached sheet?","attachment_ids":["att_..."]}'
 ```
 
+## Financial statements and ratios
+
+State an annual turnover, or attach a file that already holds the statements:
+
+```bash
+curl -s -X POST "http://127.0.0.1:8000/v1/sessions/$SESSION/messages" \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"text":"Prepare the balance sheet, income statement, cash flow and ratio analysis on turnover of 12 crore"}'
+```
+
+Balance sheet, cash flow, income statement and ratio questions route to
+`run_financial_statements`. The engine then:
+
+- builds a complete income statement, balance sheet and indirect cash flow in model
+  mode, with cash as the balancing item, so the balance sheet and cash flow tie;
+- reads the printed lines in reported mode, recomputes missing subtotals from
+  accounting identities, and warns (`FIN_CONFLICT`) when a printed subtotal disagrees
+  with its components; a missing cash flow is not estimated;
+- applies lakh, crore, million, billion or thousand scaling once, and selects the
+  current and prior columns from the stated period;
+- computes 20 modelled or 25 reported ratios across profitability, liquidity,
+  leverage, efficiency and growth, each with its rule, formula and inputs;
+- narrates only after calculation, from the engine's facts and observations.
+
+Stated assumptions such as `gross margin 45%`, `tax rate 22%`, `inventory days 45`
+or `prior year turnover 10 crore` appear on the confirmation sheet and can be edited
+before the run. A statement attachment without a turnover uses the reported lines;
+both together use the file. A file without recognisable statement labels asks for a
+turnover instead of guessing a mapping.
+
+Every line is a `FIN-*` step with its source, and re-performance must return `exact`.
+Exports carry the three statements, the ratios and the observations in the Analysis
+sheet.
+
 Dataset endpoints:
 
 - `GET /v1/datasets` — active snapshot, history, accepted formats, template link
@@ -343,6 +377,9 @@ chosen — maps natural-language questions to registered tools. Examples:
 - `Average margin percent in the attached sheet`
 - `Which rows are highest for Actual in the attached file?`
 - `What did the attached PDF say about unused capacity?`
+- `Prepare the balance sheet, income statement, cash flow and ratio analysis on turnover of 12 crore`
+- `Balance sheet and cash flow for turnover 12 lakh`
+- `Prepare the financial statements from the attached statement workbook`
 
 An out-of-scope customer returns an explicit 409 with the customers that are in scope.
 A scenario driver expressed as a percentage is converted to a fraction; a raw driver
@@ -365,12 +402,16 @@ the local-model contract (with the HTTP call stubbed, so no network is needed), 
 command line. Attachment coverage adds extraction for XLSX, CSV, DOCX, PDF and text,
 every document operation and its error paths, planner routing and clarification,
 upload → plan → confirm → trace → re-performance, ownership and typed upload errors.
+Statement coverage adds reported parsing with prior columns and scales, derived totals
+and conflict warnings, the balanced turnover model, every ratio group, assumption and
+period handling, planner clarifications, parameter-sheet edits, the card and the API
+export.
 
 ## Layout
 
 ```
-costpilot/data/         loader, gates, capability, upload extraction, document extraction
-costpilot/engine/       money, trace, narration, validation, rulebook, document analysis
+costpilot/data/         loader, gates, capability, upload extraction, document and statement extraction
+costpilot/engine/       money, trace, narration, validation, rulebook, document and statement analysis
 costpilot/engine/variance/   material, labour, overhead, flexible budget, flux
 costpilot/engine/decisions/  seven workflows
 costpilot/engine/costing/    variable-to-absorption bridge
@@ -429,6 +470,9 @@ does not create a duplicate.
   25 MB, 400 rows, 40 columns, 10 tables, 180,000 characters and 40 PDF pages. The
   extract stays on the server; the chat sees a short preview. A document figure is
   reported as printed, and lakh/crore scaling happens once in the engine.
+- Modelled statements are internally consistent management accounts, not a forecast.
+  Reported statements are read as printed; a missing cash flow is not estimated, and
+  a printed subtotal that disagrees with its components is kept with a warning.
 - One currency, one scarce resource per product-mix run, no FX translation.
 - Account flux is level B: no price/usage split is fabricated, and the residual is
   labelled unexplained.
@@ -449,3 +493,4 @@ does not create a duplicate.
 - [ADR 0005: local models plan and narrate](docs/adr/0005-local-model-planning.md)
 - [ADR 0006: validated dataset uploads](docs/adr/0006-validated-dataset-uploads.md)
 - [ADR 0007: attachment analysis](docs/adr/0007-attachment-analysis.md)
+- [ADR 0008: financial statements and ratios](docs/adr/0008-financial-statements-and-ratios.md)

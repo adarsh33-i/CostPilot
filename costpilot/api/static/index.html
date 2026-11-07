@@ -1012,6 +1012,7 @@ function renderThread(opts) {
 }
 
 const STARTERS = [
+  { title: "Financial statements", text: "Prepare the balance sheet, income statement, cash flow and ratio analysis on turnover of 12 crore" },
   { title: "Variance", text: "Variance for PRD-B at PLT-01 in 2026-09" },
   { title: "Special order", text: "Special order: 4000 units at 210 each for PRD-B at PLT-01 in 2026-09" },
   { title: "Customer margin", text: "Customer profitability for PLT-01 in 2026-09 for CUS-05" },
@@ -1024,7 +1025,8 @@ function renderHero() {
     h("h1", {}, "What should we cost out?"),
     h("p", {},
       "Ask in plain English. CostPilot resolves the period, plant and product, shows the parameter sheet, and only calculates after you confirm. " +
-      "Every number comes from a registered rule with a formula, inputs and a source. Attach a workbook, a Word file, a PDF or a screenshot and ask about it."
+      "Every number comes from a registered rule with a formula, inputs and a source. Attach a workbook, a Word file, a PDF or a screenshot and ask about it, " +
+      "or state an annual turnover to build the balance sheet, income statement, cash flow and ratios."
     ),
     dataset
       ? h("div", { class: "dataset-line" },
@@ -1335,6 +1337,9 @@ function renderCard(card) {
       h("div", { class: "meta-row" },
         header.dataset ? pill(truncate(header.dataset, 34), "teal") : null,
         header.period_id ? pill(header.period_id, "neutral") : null,
+        header.statement_mode ? pill(header.statement_mode === "model" ? "Modelled" : header.statement_mode === "reported" ? "Reported file" : "Auto source", "outline") : null,
+        header.prior_period ? pill("Prior " + header.prior_period, "neutral") : null,
+        header.attachment_name ? pill(truncate(header.attachment_name, 30), "teal") : null,
         header.plant_id ? pill("Plant " + header.plant_id, "neutral") : null,
         header.product_id && header.product_id !== "ALL" ? pill("Product " + header.product_id, "neutral") : null,
         header.customer_id ? pill("Customer " + header.customer_id, "neutral") : null,

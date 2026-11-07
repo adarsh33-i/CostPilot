@@ -16,7 +16,7 @@ ALLOWED_UNITS = {
     "INR/unit", "INR/hour", "INR/kg", "INR/scarce-unit", "INR/event",
     "INR/order", "INR/ticket", "INR/delivery", "%", "units", "kg", "hours",
     "setups", "orders", "events", "tickets", "deliveries", "inspections",
-    "ratio", "times", "score", "number",
+    "ratio", "times", "days", "score", "number",
 }
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from costpilot.data.documents import choose_table, find_column
@@ -31,6 +31,108 @@ MATERIALITY = re.compile(r"materiality(?:\s+of)?\s+([\d,]+(?:\.\d+)?)", re.IGNOR
 UNITS = re.compile(r"([\d,]+)\s*(?:units|pieces|motors|drives)", re.IGNORECASE)
 PRICE = re.compile(r"(?:at|@|price of|for)\s*(?:INR|Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)", re.IGNORECASE)
 
+STATEMENT_TERMS = (
+    "balance sheet",
+    "cash flow",
+    "cashflow",
+    "cash-flow",
+    "income statement",
+    "statement of profit and loss",
+    "profit and loss account",
+    "profit and loss statement",
+    "p&l",
+    "financial statement",
+    "financials",
+    "ratio analysis",
+    "financial ratio",
+    "financial analysis",
+    "prepare the statements",
+    "prepare statements",
+    "build the statements",
+    "build statements",
+)
+
+# Turnover may be stated with an Indian or western scale word. The engine
+# receives a plain decimal string; the conversion happens here, not in the engine.
+TURNOVER_SCALES = {
+    "crore": Decimal("10000000"),
+    "cr": Decimal("10000000"),
+    "lakh": Decimal("100000"),
+    "lac": Decimal("100000"),
+    "million": Decimal("1000000"),
+    "mn": Decimal("1000000"),
+    "billion": Decimal("1000000000"),
+    "bn": Decimal("1000000000"),
+    "thousand": Decimal("1000"),
+    "k": Decimal("1000"),
+}
+TURNOVER_AMOUNT = (
+    r"(\d[\d,]*(?:\.\d+)?)\s*"
+    r"(crores?|cr|lakhs?|lacs?|millions?|mn|billions?|bn|thousands?|k)?\b"
+)
+TURNOVER = re.compile(
+    r"\b(?:annual\s+|yearly\s+|total\s+)?(?:turn[\s-]?over|revenue|sales|top[-\s]?line)\b"
+    r"[^0-9%\n]{0,30}?" + TURNOVER_AMOUNT,
+    re.IGNORECASE,
+)
+PRIOR_TURNOVER = re.compile(
+    r"\b(?:prior|previous|last)[-\s]*(?:fy|year|period)?[-\s]*"
+    r"(?:turn[\s-]?over|revenue|sales)\b"
+    r"[^0-9%\n]{0,30}?" + TURNOVER_AMOUNT,
+    re.IGNORECASE,
+)
+STATEMENT_PERIOD = re.compile(
+    r"\bfy\s*-?\s*(\d{2,4})\b|\bfinancial year\s*(\d{4})\b|\byear ended\s*(\d{4})\b",
+    re.IGNORECASE,
+)
+ASSUMPTION_PERCENT = re.compile(
+    r"(gross margin|operating expenses?|opex|depreciation|interest rate|tax rate|"
+    r"fixed assets?|debt to turnover|dividend payout|capex|capital expenditure|"
+    r"short[-\s]?term debt)"
+    r"[^%\n.;]{0,20}?(\d+(?:\.\d+)?)\s*(?:%|percent\b|per\s*cent\b)",
+    re.IGNORECASE,
+)
+ASSUMPTION_DAYS = re.compile(
+    r"(inventory days|days of inventory|receivable days|days of receivables|debtor days|"
+    r"payable days|days of payables|creditor days)"
+    r"[^0-9\n.;]{0,15}?(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+
+SHARE_ASSUMPTIONS = {
+    "gross margin": "gross_margin",
+    "operating expenses": "opex_ratio",
+    "operating expense": "opex_ratio",
+    "opex": "opex_ratio",
+    "depreciation": "depreciation_ratio",
+    "interest rate": "interest_rate",
+    "tax rate": "tax_rate",
+    "fixed assets": "fixed_asset_ratio",
+    "fixed asset": "fixed_asset_ratio",
+    "debt to turnover": "debt_ratio",
+    "dividend payout": "dividend_payout",
+    "capex": "capex_ratio",
+    "capital expenditure": "capex_ratio",
+    "short-term debt": "short_term_debt_share",
+    "short term debt": "short_term_debt_share",
+}
+DAY_ASSUMPTIONS = {
+    "inventory days": "inventory_days",
+    "days of inventory": "inventory_days",
+    "receivable days": "receivable_days",
+    "days of receivables": "receivable_days",
+    "debtor days": "receivable_days",
+    "payable days": "payable_days",
+    "days of payables": "payable_days",
+    "creditor days": "payable_days",
+}
+STATEMENT_SHARE_KEYS = {
+    "gross_margin", "opex_ratio", "depreciation_ratio", "interest_rate", "tax_rate",
+    "fixed_asset_ratio", "debt_ratio", "dividend_payout", "capex_ratio",
+    "short_term_debt_share",
+}
+STATEMENT_DAY_KEYS = {"inventory_days", "receivable_days", "payable_days"}
+
 CITY_PLANTS = {"pune": "PLT-01", "coimbatore": "PLT-02"}
 PRODUCT_NAMES = {
     "standard motor": "PRD-A",
@@ -46,7 +148,122 @@ INTENT_LABELS = {
     "budget_scenario": "Budget scenario",
     "monitoring": "Alert monitoring",
     "group_report": "Group consolidation",
+    "financial_statements": "Financial statements and ratios",
 }
+
+
+def _scaled_amount(value: str, scale: str | None) -> str | None:
+    """Turn a printed amount and scale word into a plain decimal string."""
+    try:
+        number = Decimal(value.replace(",", "").strip())
+    except InvalidOperation:
+        return None
+    if scale:
+        key = scale.lower()
+        multiplier = TURNOVER_SCALES.get(key) or TURNOVER_SCALES.get(key.rstrip("s"))
+        if multiplier is None:
+            return None
+        number *= multiplier
+    elif number < 100:
+        # A bare small number beside "revenue" is a ratio, not a turnover.
+        return None
+    if number <= 0:
+        return None
+    return format(number, "f")
+
+
+def parse_amount(text: str) -> str | None:
+    """Parse a single amount such as '12 crore', '₹1,20,00,000' or '12000000'."""
+    cleaned = re.sub(
+        r"[₹$€£]|\b(?:inr|usd|eur|gbp|rs)\b", "", str(text), flags=re.IGNORECASE
+    )
+    match = re.search(r"(\d[\d,]*(?:\.\d+)?)\s*([a-zA-Z]+)?", cleaned)
+    if not match:
+        return None
+    return _scaled_amount(match.group(1), match.group(2))
+
+
+def _statement_turnover(text: str) -> tuple[str | None, str | None]:
+    """Split stated turnover into (current, prior) decimal strings."""
+    prior = PRIOR_TURNOVER.search(text)
+    prior_value = _scaled_amount(prior.group(1), prior.group(2)) if prior else None
+    current_value = None
+    for match in TURNOVER.finditer(text):
+        if prior and prior.start() <= match.start() < prior.end():
+            continue
+        value = _scaled_amount(match.group(1), match.group(2))
+        if value is None:
+            continue
+        current_value = value
+        break
+    return current_value, prior_value
+
+
+def _statement_currency(text: str, hinted: Any) -> str:
+    if isinstance(hinted, str) and hinted.upper() in {"INR", "USD", "EUR", "GBP"}:
+        return hinted.upper()
+    lowered = text.lower()
+    if "₹" in text or re.search(r"\b(?:inr|rupees?)\b", lowered) or re.search(
+        r"\brs\.?(?:\s|$|\d)", lowered
+    ):
+        return "INR"
+    if "$" in text or re.search(r"\b(?:usd|dollars?)\b", lowered):
+        return "USD"
+    if "€" in text or re.search(r"\b(?:eur|euros?)\b", lowered):
+        return "EUR"
+    if "£" in text or re.search(r"\b(?:gbp|pounds?)\b", lowered):
+        return "GBP"
+    return "INR"
+
+
+def _statement_period(text: str, hinted: Any) -> str | None:
+    if isinstance(hinted, str) and hinted.strip():
+        return hinted.strip().upper().replace(" ", "")
+    match = STATEMENT_PERIOD.search(text)
+    if not match:
+        return None
+    year = next(group for group in match.groups() if group)
+    if len(year) == 2:
+        year = "20" + year
+    return f"FY{year}"
+
+
+def _statement_assumptions(text: str, hinted: Any) -> tuple[dict[str, str], dict[str, str]]:
+    """Read modelling assumptions from the question and model slots."""
+    values: dict[str, str] = {}
+    sources: dict[str, str] = {}
+    for match in ASSUMPTION_PERCENT.finditer(text):
+        key = SHARE_ASSUMPTIONS.get(match.group(1).lower().strip())
+        if key is None:
+            continue
+        number = Decimal(match.group(2))
+        if number <= 0 or number >= 100:
+            continue
+        values[key] = format(number / Decimal("100"), "f")
+        sources[key] = "user_explicit"
+    for match in ASSUMPTION_DAYS.finditer(text):
+        key = DAY_ASSUMPTIONS.get(match.group(1).lower().strip())
+        if key is None:
+            continue
+        number = Decimal(match.group(2))
+        if number <= 0:
+            continue
+        values[key] = format(number, "f")
+        sources[key] = "user_explicit"
+
+    hinted_values = hinted if isinstance(hinted, dict) else {}
+    for key, raw in hinted_values.items():
+        try:
+            number = Decimal(str(raw))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+        if key in STATEMENT_SHARE_KEYS and 0 < number < 100:
+            values[key] = format(number / Decimal("100") if number > 1 else number, "f")
+            sources[key] = "user_implied"
+        elif key in STATEMENT_DAY_KEYS and 0 < number < 3650:
+            values[key] = format(number, "f")
+            sources[key] = "user_implied"
+    return values, sources
 
 
 def _has(text: str, *phrases: str) -> bool:
@@ -59,6 +276,10 @@ def _word(text: str, *words: str) -> bool:
 
 def _tier_one(text: str) -> list[str]:
     intents: list[str] = []
+    if _has(text, *STATEMENT_TERMS) or (
+        re.search(r"\bstatements?\b", text) and STATEMENT_PERIOD.search(text)
+    ):
+        intents.append("financial_statements")
     if _has(text, "explain run", "explain the run", "why did", "show the trace", "trace of"):
         intents.append("explain_run")
     if _has(text, "audit chain", "verify audit", "verify the audit"):
@@ -496,7 +717,7 @@ def plan_message(
         "tdabc", "customer_profitability", "budget_chain", "budget_scenario",
         "rolling_forecast", "forecast_quality", "performance_eval", "monitoring",
         "group_report", "connector_preview", "describe_dataset", "attachment_analysis",
-        "clarify",
+        "financial_statements", "clarify",
     }
     if (
         hinted_intent in known_intents
@@ -519,13 +740,40 @@ def plan_message(
         else:
             clarification = None
 
+    statement_turnover: str | None = None
+    statement_prior: str | None = None
+    statement_currency = "INR"
+    statement_period: str | None = None
+    statement_assumptions: dict[str, str] = {}
+    statement_sources: dict[str, str] = {}
+    if intent == "financial_statements":
+        statement_turnover, statement_prior = _statement_turnover(text)
+        hinted_turnover = slots.get("turnover")
+        if hinted_turnover not in (None, ""):
+            parsed, _ = _statement_turnover("turnover " + str(hinted_turnover))
+            if parsed:
+                statement_turnover = parsed
+        hinted_prior = slots.get("prior_turnover")
+        if hinted_prior not in (None, ""):
+            parsed, _ = _statement_turnover("turnover " + str(hinted_prior))
+            if parsed:
+                statement_prior = parsed
+        statement_currency = _statement_currency(text, slots.get("currency"))
+        statement_period = _statement_period(text, slots.get("statement_period"))
+        statement_assumptions, statement_sources = _statement_assumptions(
+            text, slots.get("assumptions")
+        )
+
     attachments = [row for row in (attachments or []) if isinstance(row, dict)]
     attachment_choice: dict[str, Any] | None = None
     attachment_source = "missing"
+    ambiguous: list[str] = []
     operation, operation_explicit = _attachment_operation(lowered, slots.get("operation"))
     attachment_ref = any(phrase in lowered for phrase in ATTACHMENT_REFERENCE)
     if not attachments:
-        if attachment_ref or hinted_intent == "attachment_analysis":
+        if intent != "financial_statements" and (
+            attachment_ref or hinted_intent == "attachment_analysis"
+        ):
             intent = "attachment_analysis"
             missing.append("attachment_id")
             clarification = {
@@ -545,10 +793,13 @@ def plan_message(
         )
         attachment_choice = choice
         use_attachment = (
-            hinted_intent == "attachment_analysis"
-            or attachment_ref
-            or choice is None
-            or (operation_explicit and operation in {"difference", "sum", "mean", "min", "max", "count", "top", "search"} and attachment_source == "user_explicit")
+            intent != "financial_statements"
+            and (
+                hinted_intent == "attachment_analysis"
+                or attachment_ref
+                or choice is None
+                or (operation_explicit and operation in {"difference", "sum", "mean", "min", "max", "count", "top", "search"} and attachment_source == "user_explicit")
+            )
         )
         if intent == "clarify" and attachment_source == "engine_default":
             use_attachment = True
@@ -566,6 +817,7 @@ def plan_message(
 
     tool_by_intent = {
         "attachment_analysis": "run_attachment_analysis",
+        "financial_statements": "run_financial_statements",
         "describe_dataset": "describe_dataset",
         "variance_analysis": "run_variance_analysis",
         "costing_bridge": "run_costing_bridge",
@@ -675,6 +927,196 @@ def plan_message(
                 "confirm": False,
             }
         )
+
+    if intent == "financial_statements":
+        if attachments and attachment_choice is None:
+            missing.append("attachment_id")
+            clarification = {
+                "question": (
+                    "More than one file is attached. Which one holds the financial statements?"
+                ),
+                "options": (ambiguous or [str(row.get("name")) for row in attachments])[:4],
+            }
+            confidence = Decimal("0.4")
+        elif attachment_choice is None and statement_turnover is None:
+            missing.append("turnover")
+            clarification = {
+                "question": (
+                    "Financial statements need a source. Attach the Excel, PDF, Word file or "
+                    "screenshot that holds them, or state the annual turnover."
+                ),
+                "options": [
+                    "Attach a statement file",
+                    "Turnover 12 crore",
+                    "Turnover 12,00,00,000",
+                ],
+            }
+            confidence = Decimal("0.4")
+        else:
+            if attachment_choice is not None:
+                from costpilot.data.statements import detect_statements
+
+                detected = detect_statements(attachment_choice)
+                if detected is None:
+                    if statement_turnover is None:
+                        missing.append("turnover")
+                        clarification = {
+                            "question": (
+                                f"{attachment_choice.get('name')!r} does not contain recognisable "
+                                "financial statements. State the annual turnover so the statements "
+                                "can be modelled, or rename the rows to standard statement labels."
+                            ),
+                            "options": [
+                                "Turnover 12 crore",
+                                "Rename the report rows to standard labels",
+                            ],
+                        }
+                        confidence = Decimal("0.4")
+                    else:
+                        assumptions.append(
+                            {
+                                "key": "mode",
+                                "text": (
+                                    f"{attachment_choice.get('name')!r} has no recognisable "
+                                    "statements, so the statements are modelled from turnover."
+                                ),
+                                "source": "engine_default",
+                                "evidence": "attachment extract",
+                                "confidence": "0.8",
+                                "confirm": False,
+                            }
+                        )
+                elif (
+                    statement_period
+                    and any(str(item).upper().startswith("FY") for item in detected.periods)
+                    and statement_period not in detected.periods
+                ):
+                    missing.append("period")
+                    clarification = {
+                        "question": (
+                            f"I could not find {statement_period} in "
+                            f"{attachment_choice.get('name')!r}. Which period should I use?"
+                        ),
+                        "options": list(detected.periods)[:4],
+                    }
+                    confidence = Decimal("0.4")
+
+            if attachment_choice is not None and statement_turnover is not None:
+                mode = "auto"
+            elif attachment_choice is not None:
+                mode = "reported"
+            elif statement_turnover is not None:
+                mode = "model"
+            else:
+                mode = "auto"
+            period_explicit = bool(statement_period)
+            if (
+                not period_explicit
+                and statement_turnover is not None
+                and (attachment_choice is None or mode == "model")
+                and re.match(r"\d{4}", str(period_id or ""))
+            ):
+                statement_period = f"FY{str(period_id)[:4]}"
+
+            if attachment_choice is not None:
+                arguments["attachment_id"] = attachment_choice["attachment_id"]
+                assumptions.append(
+                    {
+                        "key": "attachment_id",
+                        "text": f"The statements are read from {attachment_choice.get('name')!r}.",
+                        "source": (
+                            attachment_source
+                            if attachment_source != "missing"
+                            else "engine_default"
+                        ),
+                        "evidence": "attachment extract",
+                        "confidence": "0.95",
+                        "confirm": False,
+                    }
+                )
+            if statement_turnover is not None:
+                arguments["turnover"] = statement_turnover
+                assumptions.append(
+                    {
+                        "key": "turnover",
+                        "text": (
+                            f"Annual turnover is {statement_turnover} {statement_currency} "
+                            "from the question."
+                        ),
+                        "source": "user_explicit",
+                        "evidence": "question text",
+                        "confidence": "0.95",
+                        "confirm": False,
+                    }
+                )
+            if statement_prior is not None:
+                arguments["prior_turnover"] = statement_prior
+                assumptions.append(
+                    {
+                        "key": "prior_turnover",
+                        "text": (
+                            f"Prior-year turnover is {statement_prior} {statement_currency} "
+                            "from the question."
+                        ),
+                        "source": "user_explicit",
+                        "evidence": "question text",
+                        "confidence": "0.95",
+                        "confirm": False,
+                    }
+                )
+            if statement_period:
+                arguments["period"] = statement_period
+                assumptions.append(
+                    {
+                        "key": "period",
+                        "text": f"Statement period is {statement_period}.",
+                        "source": "user_explicit" if period_explicit else "engine_default",
+                        "evidence": "question text" if period_explicit else "latest open period",
+                        "confidence": "0.9" if period_explicit else "0.8",
+                        "confirm": False,
+                    }
+                )
+            arguments["mode"] = mode
+            arguments["currency"] = statement_currency
+            currency_explicit = bool(
+                isinstance(slots.get("currency"), str)
+                or any(marker in text for marker in ("₹", "$", "€", "£"))
+                or re.search(
+                    r"\b(?:inr|usd|eur|gbp|rs|rupees?|dollars?|euros?|pounds?)\b", lowered
+                )
+            )
+            assumptions.append(
+                {
+                    "key": "currency",
+                    "text": f"Amounts are shown in {statement_currency}.",
+                    "source": "user_explicit" if currency_explicit else "engine_default",
+                    "evidence": "question text" if currency_explicit else "statement policy default",
+                    "confidence": "0.9" if currency_explicit else "0.8",
+                    "confirm": False,
+                }
+            )
+            if statement_assumptions:
+                arguments["assumptions"] = statement_assumptions
+                arguments["assumption_sources"] = statement_sources
+                phrases = []
+                for key, value in sorted(statement_assumptions.items()):
+                    cleaned = key.replace("_", " ")
+                    if key in STATEMENT_SHARE_KEYS:
+                        phrases.append(f"{cleaned} {Decimal(value) * 100:.1f}%")
+                    else:
+                        phrases.append(f"{cleaned} {Decimal(value):.0f} days")
+                assumptions.append(
+                    {
+                        "key": "assumptions",
+                        "text": "Modelling assumptions come from the question: "
+                        + ", ".join(phrases)
+                        + ".",
+                        "source": "user_explicit",
+                        "evidence": "question text",
+                        "confidence": "0.9",
+                        "confirm": False,
+                    }
+                )
 
     if intent in {
         "variance_analysis", "costing_bridge", "special_order", "performance_eval",
@@ -815,6 +1257,18 @@ def plan_message(
         rationale = (
             f"Matched an attachment analysis on {attachment_choice.get('name')!r}. The engine reads the "
             "printed values, cites the attachment, and never estimates a missing figure."
+        )
+    elif intent == "financial_statements":
+        sources = []
+        if attachment_choice is not None:
+            sources.append(f"reads the reported lines in {attachment_choice.get('name')!r}")
+        if statement_turnover is not None:
+            sources.append("models the statements from the stated turnover")
+        source_text = " and ".join(sources) if sources else "needs a statement source"
+        rationale = (
+            "Matched financial statements and ratio analysis; the plan "
+            f"{source_text} in {statement_currency}. The engine builds every line, ratio and "
+            "cash flow tie from a registered rule, and the model only narrates the result."
         )
     else:
         rationale = (
